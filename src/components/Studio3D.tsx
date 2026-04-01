@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect, useMemo, Suspense } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, RoundedBox, Sphere, Cylinder, Capsule, Line, Html, useGLTF, Center, Environment } from '@react-three/drei';
+import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import * as THREE from 'three';
-import { Activity, Brain, Heart, Layers, Play, Pause, ZoomIn, Info } from 'lucide-react';
+import { Activity, Brain, Heart, Layers, Play, Pause, ZoomIn, Info, Volume2, VolumeX } from 'lucide-react';
 
 // --- 3D Components ---
 
@@ -18,6 +19,21 @@ function Bed() {
         <meshStandardMaterial color="#2c2724" roughness={0.9} />
       </RoundedBox>
     </group>
+  );
+}
+
+function Hotspot({ position, title, desc, visible }: { position: [number, number, number], title: string, desc: string, visible: boolean }) {
+  if (!visible) return null;
+  return (
+    <Html position={position} center zIndexRange={[100, 0]}>
+      <div className="group relative flex items-center justify-center cursor-pointer pointer-events-auto">
+        <div className="w-3 h-3 bg-white rounded-full shadow-[0_0_15px_rgba(255,255,255,1)] animate-pulse border-2 border-blue-500" />
+        <div className="absolute left-6 top-1/2 -translate-y-1/2 w-48 bg-black/70 backdrop-blur-xl text-white p-3 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 border border-white/20 shadow-2xl">
+          <div className="text-xs font-bold mb-1 text-blue-400">{title}</div>
+          <div className="text-[10px] leading-relaxed text-gray-200">{desc}</div>
+        </div>
+      </div>
+    </Html>
   );
 }
 
@@ -177,7 +193,7 @@ function CellularNetwork({ progress, color }: { progress: number, color: string 
   );
 }
 
-function BranchingNerves({ color }: { color: string }) {
+function BranchingNerves({ color, progress }: { color: string, progress: number }) {
   const lines = useMemo(() => {
     const generated = [];
     for (let i = 0; i < 60; i++) {
@@ -200,11 +216,39 @@ function BranchingNerves({ color }: { color: string }) {
     return generated;
   }, []);
 
+  const impulsesRef = useRef<THREE.Group>(null);
+
+  useFrame(({ clock }) => {
+    if (impulsesRef.current) {
+      const time = clock.elapsedTime * (1 + progress * 2);
+      impulsesRef.current.children.forEach((child, i) => {
+        const t = (time + i * 0.1) % 1;
+        const linePts = lines[i];
+        if (linePts) {
+          // Interpolate position along the 3 points
+          const ptIndex = t < 0.5 ? 0 : 1;
+          const localT = (t % 0.5) * 2;
+          const p1 = new THREE.Vector3(...linePts[ptIndex]);
+          const p2 = new THREE.Vector3(...linePts[ptIndex + 1]);
+          child.position.lerpVectors(p1, p2, localT);
+        }
+      });
+    }
+  });
+
   return (
     <group>
       {lines.map((pts, i) => (
         <Line key={i} points={pts as any} color={color} lineWidth={1.5} transparent opacity={0.5} blending={THREE.AdditiveBlending} />
       ))}
+      <group ref={impulsesRef}>
+        {lines.map((_, i) => (
+          <mesh key={`impulse-${i}`}>
+            <sphereGeometry args={[0.005, 8, 8]} />
+            <meshBasicMaterial color="#ffffff" transparent opacity={0.8} blending={THREE.AdditiveBlending} />
+          </mesh>
+        ))}
+      </group>
     </group>
   );
 }
@@ -251,6 +295,17 @@ function Model({ progress, layer }: { progress: number, layer: string }) {
 useGLTF.preload('/ecorche_-_anatomy_study.glb');
 
 function DetailedMannequin({ layer, progress }: { layer: string, progress: number }) {
+  const groupRef = useRef<THREE.Group>(null);
+
+  useFrame(({ clock }) => {
+    if (groupRef.current) {
+      // Breathing animation: chest expands slightly. Slower as progress increases.
+      const breathSpeed = 3 - progress * 2; 
+      const breath = Math.sin(clock.elapsedTime * breathSpeed) * 0.015;
+      groupRef.current.scale.set(1, 1 + breath * 0.5, 1 + breath);
+    }
+  });
+
   const glassMaterial = useMemo(() => new THREE.MeshPhysicalMaterial({
     color: '#e0f2fe',
     transmission: 0.8,
@@ -271,11 +326,16 @@ function DetailedMannequin({ layer, progress }: { layer: string, progress: numbe
   const stateColorHex = `#${stateColor}`;
 
   return (
-    <group position={[0, 0.25, 0]}>
+    <group ref={groupRef} position={[0, 0.25, 0]}>
       {/* Skin Layer (Real 3D Model) */}
       {showSkin && (
         <Model progress={progress} layer={layer} />
       )}
+
+      {/* Hotspots */}
+      <Hotspot position={[0, 0.1, -0.88]} title="Cortex Cérébral" desc="Ondes Thêta stimulées, favorisant un état méditatif profond." visible={showNervous} />
+      <Hotspot position={[-0.06, 0.15, -0.35]} title="Myocarde" desc="Baisse de la fréquence cardiaque et augmentation de la VFC." visible={showVascular} />
+      <Hotspot position={[0, 0.05, -0.5]} title="Nerf Vague" desc="Activation parasympathique, réduction immédiate du cortisol." visible={showNervous} />
 
       {/* Nervous System */}
       {showNervous && (
@@ -301,7 +361,7 @@ function DetailedMannequin({ layer, progress }: { layer: string, progress: numbe
           <Line points={[[0, -0.02, 0.1], [0.1, 0, 0.3], [0.12, 0, 0.7]]} color={stateColorHex} lineWidth={2} transparent opacity={0.6} />
           
           {/* Complex Internal Network */}
-          <BranchingNerves color={stateColorHex} />
+          <BranchingNerves color={stateColorHex} progress={progress} />
           <CellularNetwork progress={progress} color={stateColorHex} />
         </group>
       )}
@@ -320,6 +380,31 @@ function DetailedMannequin({ layer, progress }: { layer: string, progress: numbe
   );
 }
 
+function MiniGraph({ color, progress, type }: { color: string, progress: number, type: 'hrv' | 'stress' }) {
+  const points = useMemo(() => {
+    let pts = "";
+    for (let i = 0; i < 50; i++) {
+      const x = i * 2;
+      let y = 15;
+      if (type === 'hrv') {
+        const freq = 0.8 - progress * 0.5;
+        y += Math.sin(i * freq) * 10 * (0.3 + progress * 0.7);
+      } else {
+        const noise = (Math.random() - 0.5) * 20 * (1 - progress);
+        y += noise;
+      }
+      pts += `${x},${y} `;
+    }
+    return pts;
+  }, [progress, type]);
+
+  return (
+    <svg width="100%" height="30" className="mt-2 opacity-80 overflow-visible">
+      <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="transition-all duration-500" />
+    </svg>
+  );
+}
+
 function HolographicData({ progress, target }: { progress: number, target: any }) {
   // Only show holograms in global view
   if (target) return null;
@@ -329,22 +414,18 @@ function HolographicData({ progress, target }: { progress: number, target: any }
 
   return (
     <group>
-      <Html position={[0.6, 1.0, -0.5]} center className="pointer-events-none">
-        <div className="bg-white/90 backdrop-blur-md border border-black/10 p-3 rounded-xl shadow-xl w-32">
-          <div className="text-[10px] font-bold text-[#86868B] uppercase tracking-wider mb-1">HRV (ms)</div>
-          <div className="text-2xl font-semibold text-[#1D1D1F]">{hrv}</div>
-          <div className="w-full bg-gray-200 h-1 mt-2 rounded-full overflow-hidden">
-            <div className="bg-blue-500 h-full transition-all duration-500" style={{ width: `${(hrv/100)*100}%` }} />
-          </div>
+      <Html position={[0.7, 1.0, -0.5]} center className="pointer-events-none">
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/40 p-4 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.1)] w-40 transition-all">
+          <div className="text-[10px] font-bold text-gray-600 uppercase tracking-wider mb-1">HRV (ms)</div>
+          <div className="text-3xl font-semibold text-gray-900">{hrv}</div>
+          <MiniGraph color="#3b82f6" progress={progress} type="hrv" />
         </div>
       </Html>
-      <Html position={[-0.6, 0.7, 0.2]} center className="pointer-events-none">
-        <div className="bg-white/90 backdrop-blur-md border border-black/10 p-3 rounded-xl shadow-xl w-32">
-          <div className="text-[10px] font-bold text-[#86868B] uppercase tracking-wider mb-1">Stress (Cortisol)</div>
-          <div className="text-2xl font-semibold text-[#1D1D1F]">{stress}%</div>
-          <div className="w-full bg-gray-200 h-1 mt-2 rounded-full overflow-hidden">
-            <div className="bg-red-500 h-full transition-all duration-500" style={{ width: `${stress}%` }} />
-          </div>
+      <Html position={[-0.7, 0.7, 0.2]} center className="pointer-events-none">
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/40 p-4 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.1)] w-40 transition-all">
+          <div className="text-[10px] font-bold text-gray-600 uppercase tracking-wider mb-1">Stress (Cortisol)</div>
+          <div className="text-3xl font-semibold text-gray-900">{stress}%</div>
+          <MiniGraph color="#ef4444" progress={progress} type="stress" />
         </div>
       </Html>
     </group>
@@ -378,11 +459,50 @@ function CameraController({ target, controlsRef }: { target: any, controlsRef: a
 export function Studio3D() {
   const [timeline, setTimeline] = useState(0); // 0 to 40 minutes
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
   const [activeLayer, setActiveLayer] = useState('all');
   const [zoomTarget, setZoomTarget] = useState<any>(null);
   const controlsRef = useRef<any>(null);
 
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const oscRef = useRef<OscillatorNode | null>(null);
+  const gainRef = useRef<GainNode | null>(null);
+
   const progress = timeline / 40; // 0.0 to 1.0
+
+  // Audio Logic
+  useEffect(() => {
+    if (!isMuted && isPlaying) {
+      if (!audioCtxRef.current) {
+        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+        audioCtxRef.current = new AudioContext();
+        oscRef.current = audioCtxRef.current.createOscillator();
+        gainRef.current = audioCtxRef.current.createGain();
+        
+        oscRef.current.connect(gainRef.current);
+        gainRef.current.connect(audioCtxRef.current.destination);
+        
+        oscRef.current.type = 'sine';
+        oscRef.current.start();
+      }
+      
+      if (audioCtxRef.current.state === 'suspended') {
+        audioCtxRef.current.resume();
+      }
+
+      // Binaural/Drone effect: frequency drops as progress increases (relaxing)
+      const freq = 136.1 - (progress * 30); // 136.1Hz (Ohm) down to ~106Hz
+      const vol = 0.05 + (progress * 0.05); // Very soft volume
+      
+      oscRef.current!.frequency.setTargetAtTime(freq, audioCtxRef.current.currentTime, 0.5);
+      gainRef.current!.gain.setTargetAtTime(vol, audioCtxRef.current.currentTime, 0.5);
+      
+    } else {
+      if (gainRef.current && audioCtxRef.current) {
+        gainRef.current.gain.setTargetAtTime(0, audioCtxRef.current.currentTime, 0.5);
+      }
+    }
+  }, [isPlaying, isMuted, progress]);
 
   // Playback logic
   useEffect(() => {
@@ -480,20 +600,28 @@ export function Studio3D() {
         {/* --- 2D UI OVERLAYS --- */}
 
         {/* Left Panel: Phase Info */}
-        <div className="absolute top-8 left-8 w-80 bg-white/90 backdrop-blur-xl p-6 rounded-2xl shadow-lg border border-black/5 pointer-events-auto">
+        <div className="absolute top-8 left-8 w-80 bg-white/40 backdrop-blur-2xl p-6 rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.1)] border border-white/40 pointer-events-auto transition-all duration-500">
           <div className="flex items-center gap-2 mb-4">
-            <Info className="w-5 h-5 text-blue-500" />
-            <span className="text-xs font-bold uppercase tracking-wider text-[#86868B]">Analyse en Direct</span>
+            <Info className="w-5 h-5 text-blue-600" />
+            <span className="text-xs font-bold uppercase tracking-wider text-gray-700">Analyse en Direct</span>
           </div>
-          <h3 className="text-xl font-semibold text-[#1D1D1F] mb-2">{phase.title}</h3>
-          <p className="text-sm text-[#424245] leading-relaxed">{phase.desc}</p>
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">{phase.title}</h3>
+          <p className="text-sm text-gray-800 leading-relaxed">{phase.desc}</p>
         </div>
 
         {/* Right Panel: Controls */}
         <div className="absolute top-8 right-8 flex flex-col gap-4 pointer-events-auto">
+          {/* Audio Toggle */}
+          <button 
+            onClick={() => setIsMuted(!isMuted)}
+            className="bg-white/40 backdrop-blur-2xl p-4 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.1)] border border-white/40 flex items-center justify-center hover:bg-white/60 transition-colors"
+          >
+            {isMuted ? <VolumeX className="w-5 h-5 text-gray-700" /> : <Volume2 className="w-5 h-5 text-blue-600" />}
+          </button>
+
           {/* Layers */}
-          <div className="bg-white/90 backdrop-blur-xl p-4 rounded-2xl shadow-lg border border-black/5">
-            <div className="text-xs font-bold uppercase tracking-wider text-[#86868B] mb-3">Couches Anatomiques</div>
+          <div className="bg-white/40 backdrop-blur-2xl p-4 rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.1)] border border-white/40">
+            <div className="text-xs font-bold uppercase tracking-wider text-gray-700 mb-3 px-2">Couches Anatomiques</div>
             <div className="flex flex-col gap-2">
               {[
                 { id: 'all', label: 'Corps Entier', icon: Layers },
@@ -504,8 +632,10 @@ export function Studio3D() {
                 <button
                   key={l.id}
                   onClick={() => setActiveLayer(l.id)}
-                  className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    activeLayer === l.id ? 'bg-blue-500 text-white' : 'bg-white text-[#1D1D1F] hover:bg-gray-100 border border-gray-200'
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${
+                    activeLayer === l.id 
+                      ? 'bg-blue-500 text-white shadow-md' 
+                      : 'text-gray-800 hover:bg-white/50'
                   }`}
                 >
                   <l.icon className="w-4 h-4" />
@@ -516,19 +646,19 @@ export function Studio3D() {
           </div>
 
           {/* Zoom Targets */}
-          <div className="bg-white/90 backdrop-blur-xl p-4 rounded-2xl shadow-lg border border-black/5">
-            <div className="text-xs font-bold uppercase tracking-wider text-[#86868B] mb-3">Focus Micro-Cellulaire</div>
+          <div className="bg-white/40 backdrop-blur-2xl p-4 rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.1)] border border-white/40">
+            <div className="text-xs font-bold uppercase tracking-wider text-gray-700 mb-3 px-2">Focus Micro-Cellulaire</div>
             <div className="flex flex-col gap-2">
-              <button onClick={() => setZoomTarget(zoomPresets.global)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${!zoomTarget ? 'bg-gray-100 text-black font-semibold' : 'text-[#424245] hover:bg-gray-50'}`}>
+              <button onClick={() => setZoomTarget(zoomPresets.global)} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${!zoomTarget ? 'bg-gray-100/80 text-black shadow-sm' : 'text-gray-800 hover:bg-white/50'}`}>
                 <ZoomIn className="w-4 h-4" /> Vue Globale
               </button>
-              <button onClick={() => setZoomTarget(zoomPresets.brain)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${zoomTarget === zoomPresets.brain ? 'bg-gray-100 text-black font-semibold' : 'text-[#424245] hover:bg-gray-50'}`}>
+              <button onClick={() => setZoomTarget(zoomPresets.brain)} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${zoomTarget === zoomPresets.brain ? 'bg-gray-100/80 text-black shadow-sm' : 'text-gray-800 hover:bg-white/50'}`}>
                 <Brain className="w-4 h-4" /> Tronc Cérébral
               </button>
-              <button onClick={() => setZoomTarget(zoomPresets.heart)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${zoomTarget === zoomPresets.heart ? 'bg-gray-100 text-black font-semibold' : 'text-[#424245] hover:bg-gray-50'}`}>
+              <button onClick={() => setZoomTarget(zoomPresets.heart)} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${zoomTarget === zoomPresets.heart ? 'bg-gray-100/80 text-black shadow-sm' : 'text-gray-800 hover:bg-white/50'}`}>
                 <Heart className="w-4 h-4" /> Cohérence Cardiaque
               </button>
-              <button onClick={() => setZoomTarget(zoomPresets.cell)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${zoomTarget === zoomPresets.cell ? 'bg-gray-100 text-black font-semibold' : 'text-[#424245] hover:bg-gray-50'}`}>
+              <button onClick={() => setZoomTarget(zoomPresets.cell)} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${zoomTarget === zoomPresets.cell ? 'bg-gray-100/80 text-black shadow-sm' : 'text-gray-800 hover:bg-white/50'}`}>
                 <Activity className="w-4 h-4" /> Récepteurs Fasciaux
               </button>
             </div>
@@ -536,16 +666,16 @@ export function Studio3D() {
         </div>
 
         {/* Bottom Panel: Timeline */}
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-2xl bg-white/90 backdrop-blur-xl p-6 rounded-3xl shadow-2xl border border-black/5 pointer-events-auto flex flex-col gap-4">
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-2xl bg-white/40 backdrop-blur-2xl p-6 rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.1)] border border-white/40 pointer-events-auto flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold text-[#1D1D1F]">Timeline de la Session</div>
-            <div className="text-sm font-bold text-blue-500">{Math.floor(timeline)}:{(timeline % 1 * 60).toString().padStart(2, '0')} / 40:00</div>
+            <div className="text-sm font-semibold text-gray-900">Timeline de la Session</div>
+            <div className="text-sm font-bold text-blue-600">{Math.floor(timeline)}:{(timeline % 1 * 60).toString().padStart(2, '0')} / 40:00</div>
           </div>
           
           <div className="flex items-center gap-4">
             <button 
               onClick={() => setIsPlaying(!isPlaying)}
-              className="w-12 h-12 flex items-center justify-center bg-[#1D1D1F] text-white rounded-full hover:scale-105 transition-transform shrink-0"
+              className="w-12 h-12 flex items-center justify-center bg-gray-900 text-white rounded-full hover:scale-105 transition-transform shrink-0 shadow-lg"
             >
               {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-1" />}
             </button>
