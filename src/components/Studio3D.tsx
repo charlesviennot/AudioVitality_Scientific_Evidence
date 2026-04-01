@@ -46,17 +46,17 @@ function SoundPulse({ start, target, delay = 0 }: { start: [number, number, numb
 
   useFrame(({ clock }) => {
     if (!ref.current) return;
-    const t = ((clock.elapsedTime + delay) % 2) / 2; // 0 to 1 over 2 seconds
+    const t = ((clock.elapsedTime * 0.5 + delay) % 1); // 0 to 1
     ref.current.position.lerpVectors(startVec, targetVec, t);
-    ref.current.scale.setScalar(1 + t * 4);
+    ref.current.scale.setScalar(1 + t * 2);
     const mat = ref.current.material as THREE.MeshBasicMaterial;
-    mat.opacity = (1 - t) * 0.4;
+    mat.opacity = (1 - t) * 0.2; // Softer
   });
 
   return (
     <mesh ref={ref}>
-      <sphereGeometry args={[0.08, 16, 16]} />
-      <meshBasicMaterial color="#3b82f6" transparent opacity={0.4} depthWrite={false} blending={THREE.AdditiveBlending} />
+      <torusGeometry args={[0.05, 0.005, 16, 32]} />
+      <meshBasicMaterial color="#3b82f6" transparent opacity={0.2} depthWrite={false} blending={THREE.AdditiveBlending} />
     </mesh>
   );
 }
@@ -93,13 +93,14 @@ function SoundWaves({ progress }: { progress: number }) {
   useFrame(({ clock }) => {
     waves.current.forEach((wave, i) => {
       if (!wave) return;
-      const speed = 0.5 + (1 - progress) * 1.5;
+      const speed = 0.3 + (1 - progress) * 0.8;
       const t = (clock.elapsedTime * speed + i * 0.33) % 1;
       
-      wave.position.y = -0.1 + (t * 0.7);
+      wave.position.y = -0.1 + (t * 0.6);
+      wave.scale.setScalar(1 + t * 0.5);
       
       const mat = wave.material as THREE.MeshBasicMaterial;
-      mat.opacity = Math.sin(t * Math.PI) * 0.4; // Softer opacity
+      mat.opacity = Math.sin(t * Math.PI) * 0.15; // Max opacity 0.15
       
       const stressColor = new THREE.Color('#ef4444');
       const calmColor = new THREE.Color('#3b82f6');
@@ -110,88 +111,78 @@ function SoundWaves({ progress }: { progress: number }) {
   return (
     <group position={[0, 0, 0]}>
       {[0, 1, 2].map((i) => (
-        <mesh key={i} ref={el => { waves.current[i] = el; }} rotation={[-Math.PI/2, 0, 0]} scale={[1, 2, 1]}>
-          <ringGeometry args={[0.5, 0.55, 64]} />
-          <meshBasicMaterial color="#3b82f6" transparent opacity={0} side={THREE.DoubleSide} depthWrite={false} blending={THREE.AdditiveBlending} />
+        <mesh key={i} ref={el => { waves.current[i] = el; }} rotation={[-Math.PI/2, 0, 0]}>
+          <torusGeometry args={[0.6, 0.005, 16, 100]} />
+          <meshBasicMaterial color="#3b82f6" transparent opacity={0} depthWrite={false} blending={THREE.AdditiveBlending} />
         </mesh>
       ))}
     </group>
   );
 }
 
-function CellularNetwork({ progress, color }: { progress: number, color: string }) {
-  const count = 4000;
-  const positions = useMemo(() => {
-    const pos = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-      const z = (Math.random() - 0.5) * 1.8; // -0.9 to 0.9
-      let width = 0.1;
-      if (z < -0.7) width = 0.12; // Head
-      else if (z < -0.6) width = 0.05; // Neck
-      else if (z < -0.2) width = 0.25; // Torso
-      else if (z < 0.2) width = 0.2; // Hips
-      else width = 0.15; // Legs
-      
-      const x = (Math.random() - 0.5) * width * 2;
-      const y = (Math.random() - 0.5) * 0.15; // Thickness
-      
-      pos[i * 3] = x;
-      pos[i * 3 + 1] = y;
-      pos[i * 3 + 2] = z;
-    }
-    return pos;
-  }, []);
-
-  const pointsRef = useRef<THREE.Points>(null);
+function InternalSystems({ progress, colorHex }: { progress: number, colorHex: string }) {
+  const { scene } = useGLTF('/ecorche_-_anatomy_study.glb');
   
+  const nervesScene = useMemo(() => {
+    const clone = scene.clone();
+    clone.traverse((child) => {
+      if (child.isMesh) {
+        child.material = new THREE.MeshBasicMaterial({
+          wireframe: true,
+          transparent: true,
+          opacity: 0.1,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        });
+      }
+    });
+    return clone;
+  }, [scene]);
+
+  const cellsGroup = useMemo(() => {
+    const group = new THREE.Group();
+    scene.traverse((child) => {
+      if (child.isMesh) {
+        const points = new THREE.Points(
+          child.geometry,
+          new THREE.PointsMaterial({
+            size: 0.005,
+            transparent: true,
+            opacity: 0.3,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+          })
+        );
+        group.add(points);
+      }
+    });
+    return group;
+  }, [scene]);
+
   useFrame(({ clock }) => {
-    if (pointsRef.current) {
-      const speed = 1 + (1 - progress) * 3;
-      const pulse = (Math.sin(clock.elapsedTime * speed) + 1) / 2;
-      const mat = pointsRef.current.material as THREE.PointsMaterial;
-      mat.size = 0.008 + pulse * 0.008;
-      mat.opacity = 0.3 + pulse * 0.5;
-    }
+    const pulse = (Math.sin(clock.elapsedTime * (1 + (1-progress)*2)) + 1) / 2;
+    
+    nervesScene.traverse((child) => {
+      if (child.isMesh) {
+        child.material.color.set(colorHex);
+        child.material.opacity = 0.02 + pulse * 0.08;
+      }
+    });
+
+    cellsGroup.traverse((child) => {
+      if (child.isPoints) {
+        child.material.color.set(colorHex);
+        child.material.opacity = 0.05 + pulse * 0.15;
+      }
+    });
   });
 
   return (
-    <points ref={pointsRef}>
-      <bufferGeometry>
-        <bufferAttribute attach="attributes-position" count={count} array={positions} itemSize={3} />
-      </bufferGeometry>
-      <pointsMaterial color={color} transparent opacity={0.6} size={0.01} sizeAttenuation={true} blending={THREE.AdditiveBlending} depthWrite={false} />
-    </points>
-  );
-}
-
-function BranchingNerves({ color }: { color: string }) {
-  const lines = useMemo(() => {
-    const generated = [];
-    for (let i = 0; i < 60; i++) {
-      const zStart = -0.7 + Math.random() * 0.8;
-      const side = Math.random() > 0.5 ? 1 : -1;
-      const xEnd = side * (0.1 + Math.random() * 0.25);
-      const zEnd = zStart + (Math.random() - 0.5) * 0.3;
-      const yEnd = (Math.random() - 0.5) * 0.15;
-      
-      const xMid = xEnd * 0.5;
-      const zMid = zStart + (zEnd - zStart) * 0.5;
-      const yMid = yEnd * 0.5 + (Math.random() * 0.05);
-
-      generated.push([
-        [0, 0, zStart],
-        [xMid, yMid, zMid],
-        [xEnd, yEnd, zEnd]
-      ]);
-    }
-    return generated;
-  }, []);
-
-  return (
-    <group>
-      {lines.map((pts, i) => (
-        <Line key={i} points={pts as any} color={color} lineWidth={1.5} transparent opacity={0.5} blending={THREE.AdditiveBlending} />
-      ))}
+    <group position={[0, -0.1, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={78}>
+      <Center>
+        <primitive object={nervesScene} />
+        <primitive object={cellsGroup} />
+      </Center>
     </group>
   );
 }
@@ -287,9 +278,8 @@ function DetailedMannequin({ layer, progress }: { layer: string, progress: numbe
           <Line points={[[0, -0.02, 0.1], [-0.1, 0, 0.3], [-0.12, 0, 0.7]]} color={stateColorHex} lineWidth={2} transparent opacity={0.6} />
           <Line points={[[0, -0.02, 0.1], [0.1, 0, 0.3], [0.12, 0, 0.7]]} color={stateColorHex} lineWidth={2} transparent opacity={0.6} />
           
-          {/* Complex Internal Network */}
-          <BranchingNerves color={stateColorHex} />
-          <CellularNetwork progress={progress} color={stateColorHex} />
+          {/* Complex Internal Network matching the body shape */}
+          <InternalSystems progress={progress} colorHex={stateColorHex} />
         </group>
       )}
 
