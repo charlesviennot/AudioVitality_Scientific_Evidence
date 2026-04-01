@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, RoundedBox, Sphere, Cylinder, Capsule, Line, Html } from '@react-three/drei';
+import { OrbitControls, RoundedBox, Sphere, Cylinder, Capsule, Line, Html, useGLTF, Center } from '@react-three/drei';
 import * as THREE from 'three';
 import { Activity, Brain, Heart, Layers, Play, Pause, ZoomIn, Info } from 'lucide-react';
 
@@ -118,6 +118,30 @@ function SoundWaves({ progress }: { progress: number }) {
   );
 }
 
+function Model({ material }: { material: THREE.Material }) {
+  const { scene } = useGLTF('/ecorche_-_anatomy_study.glb');
+  
+  // Clone the scene so we can mutate materials safely
+  const clonedScene = useMemo(() => scene.clone(), [scene]);
+
+  useEffect(() => {
+    clonedScene.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.material = material;
+      }
+    });
+  }, [clonedScene, material]);
+
+  // The model needs to be scaled and rotated to match the bed and the existing nervous system
+  // Ecorche is usually standing Z-up or Y-up. Let's assume Y-up, so we rotate -Math.PI/2 on X to lie down.
+  // We'll use Center to align it perfectly.
+  return (
+    <Center position={[0, 0, -0.1]} rotation={[-Math.PI / 2, 0, 0]} scale={0.025}>
+      <primitive object={clonedScene} />
+    </Center>
+  );
+}
+
 function DetailedMannequin({ layer, progress }: { layer: string, progress: number }) {
   const glassMaterial = useMemo(() => new THREE.MeshPhysicalMaterial({
     color: '#ffffff',
@@ -140,38 +164,9 @@ function DetailedMannequin({ layer, progress }: { layer: string, progress: numbe
 
   return (
     <group position={[0, 0.25, 0]}>
-      {/* Skin Layer (Glass Silhouette) */}
+      {/* Skin Layer (Real 3D Model) */}
       {showSkin && (
-        <group>
-          {/* Head */}
-          <Capsule args={[0.11, 0.05, 16, 32]} position={[0, 0.02, -0.85]} rotation={[Math.PI/2, 0, 0]} material={glassMaterial} />
-          {/* Neck */}
-          <Cylinder args={[0.05, 0.06, 0.15, 32]} position={[0, 0, -0.7]} rotation={[Math.PI/2, 0, 0]} material={glassMaterial} />
-          {/* Torso */}
-          <Capsule args={[0.16, 0.35, 16, 32]} position={[0, 0, -0.35]} rotation={[Math.PI/2, 0, 0]} material={glassMaterial} />
-          {/* Pelvis */}
-          <Capsule args={[0.15, 0.1, 16, 32]} position={[0, 0, 0.05]} rotation={[Math.PI/2, 0, 0]} material={glassMaterial} />
-          
-          {/* Arms */}
-          {/* Upper Arm L */}
-          <Capsule args={[0.045, 0.2, 16, 16]} position={[-0.25, 0, -0.4]} rotation={[Math.PI/2, 0, 0.2]} material={glassMaterial} />
-          {/* Lower Arm L */}
-          <Capsule args={[0.035, 0.2, 16, 16]} position={[-0.32, 0, -0.1]} rotation={[Math.PI/2, 0, 0.1]} material={glassMaterial} />
-          {/* Upper Arm R */}
-          <Capsule args={[0.045, 0.2, 16, 16]} position={[0.25, 0, -0.4]} rotation={[Math.PI/2, 0, -0.2]} material={glassMaterial} />
-          {/* Lower Arm R */}
-          <Capsule args={[0.035, 0.2, 16, 16]} position={[0.32, 0, -0.1]} rotation={[Math.PI/2, 0, -0.1]} material={glassMaterial} />
-
-          {/* Legs */}
-          {/* Thigh L */}
-          <Capsule args={[0.06, 0.3, 16, 16]} position={[-0.1, 0, 0.3]} rotation={[Math.PI/2, 0, 0.05]} material={glassMaterial} />
-          {/* Calf L */}
-          <Capsule args={[0.045, 0.3, 16, 16]} position={[-0.12, 0, 0.7]} rotation={[Math.PI/2, 0, 0.02]} material={glassMaterial} />
-          {/* Thigh R */}
-          <Capsule args={[0.06, 0.3, 16, 16]} position={[0.1, 0, 0.3]} rotation={[Math.PI/2, 0, -0.05]} material={glassMaterial} />
-          {/* Calf R */}
-          <Capsule args={[0.045, 0.3, 16, 16]} position={[0.12, 0, 0.7]} rotation={[Math.PI/2, 0, -0.02]} material={glassMaterial} />
-        </group>
+        <Model material={glassMaterial} />
       )}
 
       {/* Nervous System */}
