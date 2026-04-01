@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, Suspense } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, RoundedBox, Sphere, Cylinder, Capsule, Line, Html, useGLTF, Center } from '@react-three/drei';
+import { OrbitControls, RoundedBox, Sphere, Cylinder, Capsule, Line, Html, useGLTF, Center, Environment } from '@react-three/drei';
 import * as THREE from 'three';
 import { Activity, Brain, Heart, Layers, Play, Pause, ZoomIn, Info } from 'lucide-react';
 
@@ -128,6 +128,8 @@ function Model({ material }: { material: THREE.Material }) {
     clonedScene.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.material = material;
+        child.castShadow = true;
+        child.receiveShadow = true;
       }
     });
   }, [clonedScene, material]);
@@ -136,7 +138,7 @@ function Model({ material }: { material: THREE.Material }) {
   // Ecorche is usually standing Z-up or Y-up. Let's assume Y-up, so we rotate -Math.PI/2 on X to lie down.
   // We'll use Center to align it perfectly.
   return (
-    <Center position={[0, 0, -0.1]} rotation={[-Math.PI / 2, 0, 0]} scale={0.025}>
+    <Center position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={0.025}>
       <primitive object={clonedScene} />
     </Center>
   );
@@ -144,11 +146,11 @@ function Model({ material }: { material: THREE.Material }) {
 
 function DetailedMannequin({ layer, progress }: { layer: string, progress: number }) {
   const glassMaterial = useMemo(() => new THREE.MeshPhysicalMaterial({
-    color: '#ffffff',
-    transmission: 0.95,
+    color: '#e0f2fe',
+    transmission: 0.8,
     opacity: 1,
-    metalness: 0.1,
-    roughness: 0.05,
+    metalness: 0.2,
+    roughness: 0.1,
     ior: 1.5,
     thickness: 0.5,
     transparent: true,
@@ -330,29 +332,39 @@ export function Studio3D() {
         
         {/* 3D Canvas */}
         <Canvas shadows camera={{ position: [2.5, 2.0, 2.5], fov: 45 }}>
-          <color attach="background" args={['#F5F5F7']} />
-          <ambientLight intensity={0.6} />
-          <directionalLight position={[5, 10, 5]} intensity={1} castShadow />
-          <pointLight position={[-2, 2, -2]} intensity={0.5} />
-          
-          <CameraController target={zoomTarget} controlsRef={controlsRef} />
-          <OrbitControls ref={controlsRef} enablePan={false} maxPolarAngle={Math.PI / 2 - 0.1} minDistance={0.5} maxDistance={5} />
-          
-          <Bed />
-          <DetailedMannequin layer={activeLayer} progress={progress} />
-          <SoundWaves progress={progress} />
-          <HolographicData progress={progress} target={zoomTarget} />
+          <Suspense fallback={
+            <Html center>
+              <div className="bg-white/90 backdrop-blur-md px-6 py-3 rounded-2xl shadow-xl border border-black/10 text-blue-500 font-semibold flex items-center gap-3 whitespace-nowrap">
+                <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                Chargement du modèle 3D...
+              </div>
+            </Html>
+          }>
+            <color attach="background" args={['#F5F5F7']} />
+            <ambientLight intensity={0.6} />
+            <directionalLight position={[5, 10, 5]} intensity={1} castShadow />
+            <pointLight position={[-2, 2, -2]} intensity={0.5} />
+            <Environment preset="city" />
+            
+            <CameraController target={zoomTarget} controlsRef={controlsRef} />
+            <OrbitControls ref={controlsRef} enablePan={false} maxPolarAngle={Math.PI / 2 - 0.1} minDistance={0.5} maxDistance={5} />
+            
+            <Bed />
+            <DetailedMannequin layer={activeLayer} progress={progress} />
+            <SoundWaves progress={progress} />
+            <HolographicData progress={progress} target={zoomTarget} />
 
-          {/* Overhead Speakers and their sound pulses */}
-          {speakers.map((pos, i) => (
-            <group key={`speaker-${i}`}>
-              <Speaker position={pos} target={targetChest} />
-              <SoundPulse start={pos} target={targetChest} delay={i * 0.6} />
-            </group>
-          ))}
+            {/* Overhead Speakers and their sound pulses */}
+            {speakers.map((pos, i) => (
+              <group key={`speaker-${i}`}>
+                <Speaker position={pos} target={targetChest} />
+                <SoundPulse start={pos} target={targetChest} delay={i * 0.6} />
+              </group>
+            ))}
 
-          {/* Bed Speaker Pulse (coming from below) */}
-          <SoundPulse start={bedSpeaker} target={targetChest} delay={0.3} />
+            {/* Bed Speaker Pulse (coming from below) */}
+            <SoundPulse start={bedSpeaker} target={targetChest} delay={0.3} />
+          </Suspense>
         </Canvas>
 
         {/* --- 2D UI OVERLAYS --- */}
