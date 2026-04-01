@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, RoundedBox, Sphere, Cylinder, Line, Html } from '@react-three/drei';
+import { OrbitControls, RoundedBox, Sphere, Cylinder, Capsule, Line, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { Activity, Brain, Heart, Layers, Play, Pause, ZoomIn, Info } from 'lucide-react';
 
@@ -37,9 +37,58 @@ function BeatingHeart({ progress }: { progress: number }) {
   });
 
   return (
-    <Sphere ref={ref} args={[0.06, 32, 32]} position={[-0.08, 0.05, -0.2]}>
+    <Sphere ref={ref} args={[0.06, 32, 32]} position={[-0.06, 0.05, -0.35]}>
       <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5} />
     </Sphere>
+  );
+}
+
+function SoundPulse({ start, target, delay = 0 }: { start: [number, number, number], target: [number, number, number], delay?: number }) {
+  const ref = useRef<THREE.Mesh>(null);
+  const startVec = useMemo(() => new THREE.Vector3(...start), [start]);
+  const targetVec = useMemo(() => new THREE.Vector3(...target), [target]);
+
+  useFrame(({ clock }) => {
+    if (!ref.current) return;
+    const t = ((clock.elapsedTime + delay) % 2) / 2; // 0 to 1 over 2 seconds
+    ref.current.position.lerpVectors(startVec, targetVec, t);
+    ref.current.scale.setScalar(1 + t * 4);
+    const mat = ref.current.material as THREE.MeshBasicMaterial;
+    mat.opacity = (1 - t) * 0.4;
+  });
+
+  return (
+    <mesh ref={ref}>
+      <sphereGeometry args={[0.08, 16, 16]} />
+      <meshBasicMaterial color="#3b82f6" transparent opacity={0.4} depthWrite={false} blending={THREE.AdditiveBlending} />
+    </mesh>
+  );
+}
+
+function Speaker({ position, target }: { position: [number, number, number], target: [number, number, number] }) {
+  const groupRef = useRef<THREE.Group>(null);
+  
+  useFrame(() => {
+    if (groupRef.current) {
+      groupRef.current.lookAt(new THREE.Vector3(...target));
+    }
+  });
+
+  return (
+    <group ref={groupRef} position={position}>
+      <RoundedBox args={[0.4, 0.3, 0.3]} radius={0.02}>
+        <meshStandardMaterial color="#1f1b18" roughness={0.2} metalness={0.8} />
+      </RoundedBox>
+      <mesh position={[0, 0, 0.16]}>
+        <circleGeometry args={[0.1, 32]} />
+        <meshBasicMaterial color="#111" />
+      </mesh>
+      {/* Glowing ring around speaker */}
+      <mesh position={[0, 0, 0.15]}>
+        <ringGeometry args={[0.11, 0.12, 32]} />
+        <meshBasicMaterial color="#3b82f6" transparent opacity={0.5} blending={THREE.AdditiveBlending} />
+      </mesh>
+    </group>
   );
 }
 
@@ -69,16 +118,17 @@ function SoundWaves({ progress }: { progress: number }) {
   );
 }
 
-function StylizedBody({ layer, progress }: { layer: string, progress: number }) {
-  const glassMaterial = React.useMemo(() => new THREE.MeshPhysicalMaterial({
+function DetailedMannequin({ layer, progress }: { layer: string, progress: number }) {
+  const glassMaterial = useMemo(() => new THREE.MeshPhysicalMaterial({
     color: '#ffffff',
-    transmission: 0.9,
+    transmission: 0.95,
     opacity: 1,
     metalness: 0.1,
-    roughness: 0.1,
+    roughness: 0.05,
     ior: 1.5,
     thickness: 0.5,
     transparent: true,
+    clearcoat: 1,
   }), []);
 
   const showSkin = layer === 'all' || layer === 'skin';
@@ -93,12 +143,34 @@ function StylizedBody({ layer, progress }: { layer: string, progress: number }) 
       {/* Skin Layer (Glass Silhouette) */}
       {showSkin && (
         <group>
-          <Sphere args={[0.12, 32, 32]} position={[0, 0, -0.8]} material={glassMaterial} />
-          <Cylinder args={[0.18, 0.15, 0.6, 32]} position={[0, 0, -0.3]} rotation={[Math.PI/2, 0, 0]} material={glassMaterial} />
-          <Cylinder args={[0.07, 0.05, 0.8, 32]} position={[-0.1, 0, 0.4]} rotation={[Math.PI/2, 0, 0]} material={glassMaterial} />
-          <Cylinder args={[0.07, 0.05, 0.8, 32]} position={[0.1, 0, 0.4]} rotation={[Math.PI/2, 0, 0]} material={glassMaterial} />
-          <Cylinder args={[0.05, 0.04, 0.6, 32]} position={[-0.25, 0, -0.3]} rotation={[Math.PI/2, 0, 0]} material={glassMaterial} />
-          <Cylinder args={[0.05, 0.04, 0.6, 32]} position={[0.25, 0, -0.3]} rotation={[Math.PI/2, 0, 0]} material={glassMaterial} />
+          {/* Head */}
+          <Capsule args={[0.11, 0.05, 16, 32]} position={[0, 0.02, -0.85]} rotation={[Math.PI/2, 0, 0]} material={glassMaterial} />
+          {/* Neck */}
+          <Cylinder args={[0.05, 0.06, 0.15, 32]} position={[0, 0, -0.7]} rotation={[Math.PI/2, 0, 0]} material={glassMaterial} />
+          {/* Torso */}
+          <Capsule args={[0.16, 0.35, 16, 32]} position={[0, 0, -0.35]} rotation={[Math.PI/2, 0, 0]} material={glassMaterial} />
+          {/* Pelvis */}
+          <Capsule args={[0.15, 0.1, 16, 32]} position={[0, 0, 0.05]} rotation={[Math.PI/2, 0, 0]} material={glassMaterial} />
+          
+          {/* Arms */}
+          {/* Upper Arm L */}
+          <Capsule args={[0.045, 0.2, 16, 16]} position={[-0.25, 0, -0.4]} rotation={[Math.PI/2, 0, 0.2]} material={glassMaterial} />
+          {/* Lower Arm L */}
+          <Capsule args={[0.035, 0.2, 16, 16]} position={[-0.32, 0, -0.1]} rotation={[Math.PI/2, 0, 0.1]} material={glassMaterial} />
+          {/* Upper Arm R */}
+          <Capsule args={[0.045, 0.2, 16, 16]} position={[0.25, 0, -0.4]} rotation={[Math.PI/2, 0, -0.2]} material={glassMaterial} />
+          {/* Lower Arm R */}
+          <Capsule args={[0.035, 0.2, 16, 16]} position={[0.32, 0, -0.1]} rotation={[Math.PI/2, 0, -0.1]} material={glassMaterial} />
+
+          {/* Legs */}
+          {/* Thigh L */}
+          <Capsule args={[0.06, 0.3, 16, 16]} position={[-0.1, 0, 0.3]} rotation={[Math.PI/2, 0, 0.05]} material={glassMaterial} />
+          {/* Calf L */}
+          <Capsule args={[0.045, 0.3, 16, 16]} position={[-0.12, 0, 0.7]} rotation={[Math.PI/2, 0, 0.02]} material={glassMaterial} />
+          {/* Thigh R */}
+          <Capsule args={[0.06, 0.3, 16, 16]} position={[0.1, 0, 0.3]} rotation={[Math.PI/2, 0, -0.05]} material={glassMaterial} />
+          {/* Calf R */}
+          <Capsule args={[0.045, 0.3, 16, 16]} position={[0.12, 0, 0.7]} rotation={[Math.PI/2, 0, -0.02]} material={glassMaterial} />
         </group>
       )}
 
@@ -106,15 +178,24 @@ function StylizedBody({ layer, progress }: { layer: string, progress: number }) 
       {showNervous && (
         <group>
           {/* Brain */}
-          <Sphere args={[0.07, 16, 16]} position={[0, 0.02, -0.8]}>
-            <meshBasicMaterial color={stateColorHex} transparent opacity={0.8} />
+          <Sphere args={[0.08, 24, 24]} position={[0, 0.02, -0.88]}>
+            <meshBasicMaterial color={stateColorHex} transparent opacity={0.6} blending={THREE.AdditiveBlending} />
           </Sphere>
-          {/* Vagus Nerve / Spine */}
-          <Line 
-            points={[[0, 0, -0.7], [0, 0, -0.5], [-0.05, 0, -0.2], [0, 0, 0.1]]} 
-            color={stateColorHex} 
-            lineWidth={4} 
-          />
+          {/* Brain Core (glowing) */}
+          <Sphere args={[0.04, 16, 16]} position={[0, 0.02, -0.88]}>
+            <meshBasicMaterial color={stateColorHex} transparent opacity={0.9} />
+          </Sphere>
+          
+          {/* Spinal Cord */}
+          <Line points={[[0, 0, -0.8], [0, -0.02, -0.5], [0, -0.02, 0.1]]} color={stateColorHex} lineWidth={5} />
+          
+          {/* Peripheral Nerves (simplified branching) */}
+          {/* Arms */}
+          <Line points={[[0, -0.02, -0.5], [-0.25, 0, -0.4], [-0.32, 0, -0.1]]} color={stateColorHex} lineWidth={2} transparent opacity={0.6} />
+          <Line points={[[0, -0.02, -0.5], [0.25, 0, -0.4], [0.32, 0, -0.1]]} color={stateColorHex} lineWidth={2} transparent opacity={0.6} />
+          {/* Legs */}
+          <Line points={[[0, -0.02, 0.1], [-0.1, 0, 0.3], [-0.12, 0, 0.7]]} color={stateColorHex} lineWidth={2} transparent opacity={0.6} />
+          <Line points={[[0, -0.02, 0.1], [0.1, 0, 0.3], [0.12, 0, 0.7]]} color={stateColorHex} lineWidth={2} transparent opacity={0.6} />
         </group>
       )}
 
@@ -122,6 +203,10 @@ function StylizedBody({ layer, progress }: { layer: string, progress: number }) 
       {showVascular && (
         <group>
           <BeatingHeart progress={progress} />
+          {/* Aorta / Main vessels */}
+          <Line points={[[-0.05, 0.05, -0.4], [0, 0, -0.3], [0, 0, 0.1]]} color="#ef4444" lineWidth={4} transparent opacity={0.7} />
+          <Line points={[[0, 0, 0.1], [-0.08, 0, 0.3], [-0.1, 0, 0.7]]} color="#ef4444" lineWidth={2} transparent opacity={0.5} />
+          <Line points={[[0, 0, 0.1], [0.08, 0, 0.3], [0.1, 0, 0.7]]} color="#ef4444" lineWidth={2} transparent opacity={0.5} />
         </group>
       )}
     </group>
@@ -161,8 +246,8 @@ function HolographicData({ progress, target }: { progress: number, target: any }
 
 function CameraController({ target, controlsRef }: { target: any, controlsRef: any }) {
   const { camera } = useThree();
-  const targetPos = React.useMemo(() => new THREE.Vector3(), []);
-  const targetLookAt = React.useMemo(() => new THREE.Vector3(), []);
+  const targetPos = useMemo(() => new THREE.Vector3(), []);
+  const targetLookAt = useMemo(() => new THREE.Vector3(), []);
   
   useFrame(() => {
     if (target && controlsRef.current) {
@@ -225,6 +310,14 @@ export function Studio3D() {
     cell: { position: [0.2, 0.4, 0.3], lookAt: [0, 0.25, 0.3] },
   };
 
+  const targetChest: [number, number, number] = [0, 0.25, -0.3];
+  const speakers: [number, number, number][] = [
+    [-1.5, 1.5, -1.5], // Front Left
+    [1.5, 1.5, -1.5],  // Front Right
+    [0, 1.5, 1.5]      // Rear Center
+  ];
+  const bedSpeaker: [number, number, number] = [0, -0.1, -0.2]; // Inside the bed
+
   return (
     <section className="py-24 bg-[#E5E5EA] relative overflow-hidden" id="studio">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-12 relative z-10">
@@ -251,9 +344,20 @@ export function Studio3D() {
           <OrbitControls ref={controlsRef} enablePan={false} maxPolarAngle={Math.PI / 2 - 0.1} minDistance={0.5} maxDistance={5} />
           
           <Bed />
-          <StylizedBody layer={activeLayer} progress={progress} />
+          <DetailedMannequin layer={activeLayer} progress={progress} />
           <SoundWaves progress={progress} />
           <HolographicData progress={progress} target={zoomTarget} />
+
+          {/* Overhead Speakers and their sound pulses */}
+          {speakers.map((pos, i) => (
+            <group key={`speaker-${i}`}>
+              <Speaker position={pos} target={targetChest} />
+              <SoundPulse start={pos} target={targetChest} delay={i * 0.6} />
+            </group>
+          ))}
+
+          {/* Bed Speaker Pulse (coming from below) */}
+          <SoundPulse start={bedSpeaker} target={targetChest} delay={0.3} />
         </Canvas>
 
         {/* --- 2D UI OVERLAYS --- */}
