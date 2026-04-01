@@ -1,395 +1,349 @@
-import { Suspense, useRef, useState, useMemo } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Environment, Html, ContactShadows, RoundedBox } from '@react-three/drei';
+import React, { useState, useRef, useEffect } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { OrbitControls, RoundedBox, Sphere, Cylinder, Line, Html } from '@react-three/drei';
 import * as THREE from 'three';
-import { motion, AnimatePresence } from 'motion/react';
-import { playDeepWoosh, playCloseSound } from '../utils/sound';
-import { X, Info, Maximize2, Waves, Zap, Brain, Droplet, HeartPulse } from 'lucide-react';
+import { Activity, Brain, Heart, Layers, Play, Pause, ZoomIn, Info } from 'lucide-react';
 
-const HOTSPOTS = [
-  { 
-    id: 'step1', 
-    position: [0, 1.2, 0.2] as [number, number, number], 
-    title: '1. Biophysical Penetration', 
-    description: 'The human body is 70% water, an excellent conductor for sound. Unlike mechanical massages that stop at the skin, AudioVitality’s calibrated 40-80 Hz waves penetrate deep muscle tissues, fascia, and interstitial fluids, creating a true cellular-level "micro-massage".',
-    Icon: Waves
-  },
-  { 
-    id: 'step2', 
-    position: [0, 1.0, 0.5] as [number, number, number], 
-    title: '2. Mechanoreceptor Awakening', 
-    description: 'Specific pressure sensors under the skin and in connective tissues (Pacinian and Meissner corpuscles) are biologically programmed to react to our exact frequencies. They activate and send massive electrical signals through the spinal cord to the brain.',
-    Icon: Zap
-  },
-  { 
-    id: 'step3', 
-    position: [0, 1.1, -0.6] as [number, number, number], 
-    title: '3. Nervous System Shift', 
-    description: 'Signals from mechanoreceptors reach the brainstem and stimulate the vagus nerve. This forces an immediate "sympathovagal shift": turning off the Sympathetic mode (stress, inflammation) and turning on the Parasympathetic mode (rest, digestion, tissue repair).',
-    Icon: Brain
-  },
-  { 
-    id: 'step4', 
-    position: [-0.4, 1.0, -0.2] as [number, number, number], 
-    title: '4. Vascular & Metabolic Flush', 
-    description: 'Sound vibrations create a gentle "shear stress" on blood vessel walls, triggering the release of Nitric Oxide (NO) for vasodilation. Blood flow and lymphatic drainage accelerate, flushing out toxins (like lactic acid) and reducing local inflammation (DOMS).',
-    Icon: Droplet
-  },
-  { 
-    id: 'result', 
-    position: [0.15, 1.2, -0.3] as [number, number, number], 
-    title: 'Measurable Result: +43% HRV', 
-    description: 'At the end of the 40-minute session, this physiological cascade results in a state of profound relaxation and a spectacular increase in Heart Rate Variability (HRV)—measured up to +43% in our clinical trials with CHUV. The body has recovered its deficit.',
-    Icon: HeartPulse
-  }
-];
-
-function SoundPulse({ start, target, delay = 0 }: { start: [number, number, number], target: [number, number, number], delay?: number }) {
-  const ref = useRef<THREE.Mesh>(null);
-  const startVec = useMemo(() => new THREE.Vector3(...start), [start]);
-  const targetVec = useMemo(() => new THREE.Vector3(...target), [target]);
-
-  useFrame(({ clock }) => {
-    if (!ref.current) return;
-    const t = ((clock.elapsedTime + delay) % 2) / 2; // 0 to 1 over 2 seconds
-    ref.current.position.lerpVectors(startVec, targetVec, t);
-    ref.current.scale.setScalar(1 + t * 4);
-    (ref.current.material as THREE.MeshBasicMaterial).opacity = (1 - t) * 0.4;
-  });
-
-  return (
-    <mesh ref={ref}>
-      <sphereGeometry args={[0.08, 16, 16]} />
-      <meshBasicMaterial color="#3b82f6" transparent opacity={0.4} depthWrite={false} blending={THREE.AdditiveBlending} />
-    </mesh>
-  );
-}
-
-function Speaker({ position, target }: { position: [number, number, number], target: [number, number, number] }) {
-  const groupRef = useRef<THREE.Group>(null);
-  
-  useFrame(() => {
-    if (groupRef.current) {
-      groupRef.current.lookAt(new THREE.Vector3(...target));
-    }
-  });
-
-  return (
-    <group ref={groupRef} position={position}>
-      <RoundedBox args={[0.4, 0.3, 0.3]} radius={0.02}>
-        <meshStandardMaterial color="#E5E5EA" roughness={0.2} metalness={0.1} />
-      </RoundedBox>
-      <mesh position={[0, 0, 0.16]}>
-        <circleGeometry args={[0.1, 32]} />
-        <meshBasicMaterial color="#1D1D1F" />
-      </mesh>
-      {/* Glowing ring around speaker */}
-      <mesh position={[0, 0, 0.15]}>
-        <ringGeometry args={[0.11, 0.12, 32]} />
-        <meshBasicMaterial color="#3b82f6" transparent opacity={0.5} blending={THREE.AdditiveBlending} />
-      </mesh>
-    </group>
-  );
-}
+// --- 3D Components ---
 
 function Bed() {
   return (
     <group position={[0, -0.5, 0]}>
-      {/* Base (Dark Grey/Brown) */}
-      <RoundedBox args={[1.2, 0.5, 2.4]} radius={0.05} position={[0, 0.3, 0]}>
+      {/* Main Base */}
+      <RoundedBox args={[1.2, 0.4, 2.4]} radius={0.05} position={[0, 0.2, 0]}>
         <meshStandardMaterial color="#1f1b18" roughness={0.8} />
       </RoundedBox>
-      {/* Mattress (Slightly lighter dark grey/brown) */}
-      <RoundedBox args={[1.1, 0.2, 2.3]} radius={0.1} position={[0, 0.65, 0]}>
+      {/* Mattress */}
+      <RoundedBox args={[1.1, 0.15, 2.3]} radius={0.05} position={[0, 0.475, 0]}>
         <meshStandardMaterial color="#2c2724" roughness={0.9} />
       </RoundedBox>
       {/* Pillow */}
-      <RoundedBox args={[0.6, 0.15, 0.3]} radius={0.05} position={[0, 0.8, -0.8]}>
+      <RoundedBox args={[0.6, 0.15, 0.3]} radius={0.05} position={[0, 0.6, -0.8]}>
         <meshStandardMaterial color="#2c2724" roughness={0.9} />
       </RoundedBox>
-      
-      {/* LED Strip all around the bottom edge */}
-      <RoundedBox args={[1.22, 0.04, 2.42]} radius={0.02} position={[0, 0.05, 0]}>
-        <meshBasicMaterial color="#3b82f6" />
-      </RoundedBox>
-      {/* Extra ambient glow for the LED on the floor */}
-      <RoundedBox args={[1.5, 0.01, 2.7]} radius={0.2} position={[0, 0.01, 0]}>
-        <meshBasicMaterial color="#3b82f6" transparent opacity={0.25} depthWrite={false} />
-      </RoundedBox>
-
-      {/* LED Glow lights under bed */}
-      <pointLight position={[0, 0.1, 0]} color="#3b82f6" intensity={2.5} distance={4} />
-      <pointLight position={[0, 0.1, 1]} color="#3b82f6" intensity={2} distance={3} />
-      <pointLight position={[0, 0.1, -1]} color="#3b82f6" intensity={2} distance={3} />
     </group>
   );
 }
 
-function Skeleton({ yOffset }: { yOffset: number }) {
-  // Premium frosted glass material for the skeleton (clean, clinical, high-tech)
-  const boneMaterial = new THREE.MeshPhysicalMaterial({
-    color: "#e0f2fe",
-    roughness: 0.15,
-    metalness: 0.1,
-    transmission: 0.95,
-    transparent: true,
-    opacity: 1,
-    ior: 1.5,
-    thickness: 0.5,
-    clearcoat: 1,
-    clearcoatRoughness: 0.1
+function BeatingHeart({ progress }: { progress: number }) {
+  const ref = useRef<THREE.Mesh>(null);
+  const color = new THREE.Color().lerpColors(new THREE.Color('#ef4444'), new THREE.Color('#3b82f6'), progress);
+  
+  useFrame(({ clock }) => {
+    // Heart rate slows down as progress increases (stress to calm)
+    const speed = 12 - (progress * 8); 
+    const scale = 1 + Math.sin(clock.elapsedTime * speed) * 0.15;
+    if (ref.current) ref.current.scale.setScalar(scale);
   });
 
   return (
-    <group position={[0, yOffset, 0]}>
-      {/* Skull */}
-      <mesh position={[0, 0.05, -0.75]} material={boneMaterial}>
-        <sphereGeometry args={[0.09, 32, 32]} />
-      </mesh>
-      {/* Jaw */}
-      <mesh position={[0, 0.0, -0.68]} material={boneMaterial}>
-        <boxGeometry args={[0.07, 0.05, 0.08]} />
-      </mesh>
+    <Sphere ref={ref} args={[0.06, 32, 32]} position={[-0.08, 0.05, -0.2]}>
+      <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5} />
+    </Sphere>
+  );
+}
 
-      {/* Spine (Vertebrae) */}
-      {Array.from({ length: 15 }).map((_, i) => (
-        <mesh key={`spine-${i}`} position={[0, -0.02, -0.6 + i * 0.05]} material={boneMaterial}>
-          <boxGeometry args={[0.03, 0.03, 0.04]} />
+function SoundWaves({ progress }: { progress: number }) {
+  const waves = useRef<(THREE.Mesh | null)[]>([]);
+  
+  useFrame(({ clock }) => {
+    waves.current.forEach((wave, i) => {
+      if (!wave) return;
+      const speed = 1 + progress; // Waves get smoother/slower
+      const t = (clock.elapsedTime * speed + i * 0.33) % 1;
+      wave.scale.setScalar(1 + t * 2);
+      const mat = wave.material as THREE.MeshBasicMaterial;
+      mat.opacity = (1 - t) * 0.4;
+    });
+  });
+
+  return (
+    <group position={[0, 0, 0]}>
+      {[0, 1, 2].map((i) => (
+        <mesh key={i} ref={el => { waves.current[i] = el; }} rotation={[-Math.PI/2, 0, 0]}>
+          <ringGeometry args={[0.3, 0.35, 64]} />
+          <meshBasicMaterial color="#3b82f6" transparent opacity={0.5} side={THREE.DoubleSide} depthWrite={false} />
         </mesh>
       ))}
-
-      {/* Ribcage (Curved ribs) */}
-      {Array.from({ length: 10 }).map((_, i) => (
-        <mesh key={`rib-${i}`} position={[0, 0.02, -0.5 + i * 0.035]} rotation={[Math.PI/2, 0, 0]} material={boneMaterial}>
-          <torusGeometry args={[0.1 - Math.abs(i - 4)*0.01, 0.012, 8, 24, Math.PI]} />
-        </mesh>
-      ))}
-
-      {/* Pelvis */}
-      <mesh position={[0, 0, 0.15]} material={boneMaterial}>
-        <boxGeometry args={[0.18, 0.06, 0.12]} />
-      </mesh>
-
-      {/* Femurs */}
-      <mesh position={[-0.07, 0, 0.35]} rotation={[Math.PI/2, 0, 0]} material={boneMaterial}>
-        <cylinderGeometry args={[0.018, 0.012, 0.3]} />
-      </mesh>
-      <mesh position={[0.07, 0, 0.35]} rotation={[Math.PI/2, 0, 0]} material={boneMaterial}>
-        <cylinderGeometry args={[0.018, 0.012, 0.3]} />
-      </mesh>
-
-      {/* Tibias */}
-      <mesh position={[-0.07, 0, 0.7]} rotation={[Math.PI/2, 0, 0]} material={boneMaterial}>
-        <cylinderGeometry args={[0.012, 0.008, 0.35]} />
-      </mesh>
-      <mesh position={[0.07, 0, 0.7]} rotation={[Math.PI/2, 0, 0]} material={boneMaterial}>
-        <cylinderGeometry args={[0.012, 0.008, 0.35]} />
-      </mesh>
-
-      {/* Arms */}
-      <mesh position={[-0.18, 0, -0.4]} rotation={[Math.PI/2, 0, 0.2]} material={boneMaterial}>
-        <cylinderGeometry args={[0.012, 0.01, 0.25]} />
-      </mesh>
-      <mesh position={[0.18, 0, -0.4]} rotation={[Math.PI/2, 0, -0.2]} material={boneMaterial}>
-        <cylinderGeometry args={[0.012, 0.01, 0.25]} />
-      </mesh>
-      <mesh position={[-0.22, 0, -0.1]} rotation={[Math.PI/2, 0, 0.1]} material={boneMaterial}>
-        <cylinderGeometry args={[0.01, 0.008, 0.25]} />
-      </mesh>
-      <mesh position={[0.22, 0, -0.1]} rotation={[Math.PI/2, 0, -0.1]} material={boneMaterial}>
-        <cylinderGeometry args={[0.01, 0.008, 0.25]} />
-      </mesh>
     </group>
   );
 }
 
-function PhysiologicalSystems({ yOffset }: { yOffset: number }) {
-  const spineRef = useRef<THREE.Mesh>(null);
-  const heartRef = useRef<THREE.Mesh>(null);
-  const vagusRef = useRef<THREE.Mesh>(null);
-  const flushRef = useRef<THREE.Mesh>(null);
+function StylizedBody({ layer, progress }: { layer: string, progress: number }) {
+  const glassMaterial = React.useMemo(() => new THREE.MeshPhysicalMaterial({
+    color: '#ffffff',
+    transmission: 0.9,
+    opacity: 1,
+    metalness: 0.1,
+    roughness: 0.1,
+    ior: 1.5,
+    thickness: 0.5,
+    transparent: true,
+  }), []);
 
-  useFrame(({ clock }) => {
-    const t = clock.elapsedTime;
-    
-    // Spine signal (fast pulsing upwards representing mechanoreceptor electrical signals)
-    if (spineRef.current) {
-      const mat = spineRef.current.material as THREE.MeshBasicMaterial;
-      mat.opacity = 0.4 + Math.sin(t * 10) * 0.6;
-    }
+  const showSkin = layer === 'all' || layer === 'skin';
+  const showNervous = layer === 'all' || layer === 'nervous';
+  const showVascular = layer === 'all' || layer === 'vascular';
 
-    // Heartbeat (slower, rhythmic for HRV)
-    if (heartRef.current) {
-      const scale = 1 + Math.pow(Math.sin(t * 3), 4) * 0.3;
-      heartRef.current.scale.setScalar(scale);
-    }
+  const stateColor = new THREE.Color().lerpColors(new THREE.Color('#ef4444'), new THREE.Color('#3b82f6'), progress).getHexString();
+  const stateColorHex = `#${stateColor}`;
 
-    // Vagus Nerve (steady glow from brainstem to heart)
-    if (vagusRef.current) {
-      const mat = vagusRef.current.material as THREE.MeshBasicMaterial;
-      mat.opacity = 0.5 + Math.cos(t * 2) * 0.5;
-    }
+  return (
+    <group position={[0, 0.25, 0]}>
+      {/* Skin Layer (Glass Silhouette) */}
+      {showSkin && (
+        <group>
+          <Sphere args={[0.12, 32, 32]} position={[0, 0, -0.8]} material={glassMaterial} />
+          <Cylinder args={[0.18, 0.15, 0.6, 32]} position={[0, 0, -0.3]} rotation={[Math.PI/2, 0, 0]} material={glassMaterial} />
+          <Cylinder args={[0.07, 0.05, 0.8, 32]} position={[-0.1, 0, 0.4]} rotation={[Math.PI/2, 0, 0]} material={glassMaterial} />
+          <Cylinder args={[0.07, 0.05, 0.8, 32]} position={[0.1, 0, 0.4]} rotation={[Math.PI/2, 0, 0]} material={glassMaterial} />
+          <Cylinder args={[0.05, 0.04, 0.6, 32]} position={[-0.25, 0, -0.3]} rotation={[Math.PI/2, 0, 0]} material={glassMaterial} />
+          <Cylinder args={[0.05, 0.04, 0.6, 32]} position={[0.25, 0, -0.3]} rotation={[Math.PI/2, 0, 0]} material={glassMaterial} />
+        </group>
+      )}
 
-    // Vascular flush (expanding and contracting aura for Nitric Oxide release)
-    if (flushRef.current) {
-      const scale = 1 + Math.sin(t * 1.5) * 0.1;
-      flushRef.current.scale.setScalar(scale);
-      const mat = flushRef.current.material as THREE.MeshBasicMaterial;
-      mat.opacity = 0.15 + Math.sin(t * 1.5) * 0.15;
-    }
-  });
+      {/* Nervous System */}
+      {showNervous && (
+        <group>
+          {/* Brain */}
+          <Sphere args={[0.07, 16, 16]} position={[0, 0.02, -0.8]}>
+            <meshBasicMaterial color={stateColorHex} transparent opacity={0.8} />
+          </Sphere>
+          {/* Vagus Nerve / Spine */}
+          <Line 
+            points={[[0, 0, -0.7], [0, 0, -0.5], [-0.05, 0, -0.2], [0, 0, 0.1]]} 
+            color={stateColorHex} 
+            lineWidth={4} 
+          />
+        </group>
+      )}
+
+      {/* Vascular / Organs */}
+      {showVascular && (
+        <group>
+          <BeatingHeart progress={progress} />
+        </group>
+      )}
+    </group>
+  );
+}
+
+function HolographicData({ progress, target }: { progress: number, target: any }) {
+  // Only show holograms in global view
+  if (target) return null;
+
+  const hrv = Math.round(42 + (progress * 43));
+  const stress = Math.round(85 - (progress * 70));
 
   return (
     <group>
-      {/* Spine / Spinal Cord (Inside the vertebrae) */}
-      <mesh ref={spineRef} position={[0, yOffset - 0.02, -0.2]} rotation={[Math.PI/2, 0, 0]}>
-        <cylinderGeometry args={[0.008, 0.008, 0.8, 8]} />
-        <meshBasicMaterial color="#60a5fa" transparent opacity={0.8} blending={THREE.AdditiveBlending} depthWrite={false} />
-      </mesh>
-
-      {/* Brainstem / Vagus Connection */}
-      <mesh ref={vagusRef} position={[0, yOffset + 0.02, -0.55]} rotation={[Math.PI/2, 0, 0]}>
-        <cylinderGeometry args={[0.005, 0.015, 0.3, 8]} />
-        <meshBasicMaterial color="#a855f7" transparent opacity={0.8} blending={THREE.AdditiveBlending} depthWrite={false} />
-      </mesh>
-
-      {/* Heart (Inside the ribcage) */}
-      <mesh ref={heartRef} position={[0.03, yOffset + 0.02, -0.35]}>
-        <sphereGeometry args={[0.04, 16, 16]} />
-        <meshBasicMaterial color="#ef4444" transparent opacity={0.9} blending={THREE.AdditiveBlending} depthWrite={false} />
-      </mesh>
-
-      {/* Vascular Flush Aura (Torso) */}
-      <mesh ref={flushRef} position={[0, yOffset, -0.3]} rotation={[Math.PI/2, 0, 0]}>
-        <capsuleGeometry args={[0.15, 0.4, 16, 16]} />
-        <meshBasicMaterial color="#ef4444" transparent opacity={0.2} blending={THREE.AdditiveBlending} depthWrite={false} />
-      </mesh>
+      <Html position={[0.6, 1.0, -0.5]} center className="pointer-events-none">
+        <div className="bg-white/90 backdrop-blur-md border border-black/10 p-3 rounded-xl shadow-xl w-32">
+          <div className="text-[10px] font-bold text-[#86868B] uppercase tracking-wider mb-1">HRV (ms)</div>
+          <div className="text-2xl font-semibold text-[#1D1D1F]">{hrv}</div>
+          <div className="w-full bg-gray-200 h-1 mt-2 rounded-full overflow-hidden">
+            <div className="bg-blue-500 h-full transition-all duration-500" style={{ width: `${(hrv/100)*100}%` }} />
+          </div>
+        </div>
+      </Html>
+      <Html position={[-0.6, 0.7, 0.2]} center className="pointer-events-none">
+        <div className="bg-white/90 backdrop-blur-md border border-black/10 p-3 rounded-xl shadow-xl w-32">
+          <div className="text-[10px] font-bold text-[#86868B] uppercase tracking-wider mb-1">Stress (Cortisol)</div>
+          <div className="text-2xl font-semibold text-[#1D1D1F]">{stress}%</div>
+          <div className="w-full bg-gray-200 h-1 mt-2 rounded-full overflow-hidden">
+            <div className="bg-red-500 h-full transition-all duration-500" style={{ width: `${stress}%` }} />
+          </div>
+        </div>
+      </Html>
     </group>
   );
 }
 
-function Scene({ setActiveHotspot }: { setActiveHotspot: (id: string | null) => void }) {
-  const target: [number, number, number] = [0, 0.38, -0.2]; // Chest area
+function CameraController({ target, controlsRef }: { target: any, controlsRef: any }) {
+  const { camera } = useThree();
+  const targetPos = React.useMemo(() => new THREE.Vector3(), []);
+  const targetLookAt = React.useMemo(() => new THREE.Vector3(), []);
   
-  const speakers: [number, number, number][] = [
-    [-1.5, 2, -1.5], // Front Left
-    [1.5, 2, -1.5],  // Front Right
-    [0, 2, 1.5]      // Rear Center
-  ];
-  
-  const bedSpeaker: [number, number, number] = [0, 0.1, -0.2]; // Inside the bed
-
-  return (
-    <>
-      <color attach="background" args={['#E5E5EA']} />
-      <ambientLight intensity={0.7} />
-      <directionalLight position={[5, 5, 5]} intensity={1.2} castShadow />
-      <pointLight position={[0, 1, -0.5]} intensity={1.5} color="#3b82f6" distance={3} /> {/* Spotlight on chest */}
-      <Environment preset="studio" />
-
-      <Bed />
-      <Skeleton yOffset={0.38} />
-      <PhysiologicalSystems yOffset={0.38} />
-
-      {/* Overhead Speakers and their sound pulses */}
-      {speakers.map((pos, i) => (
-        <group key={`speaker-${i}`}>
-          <Speaker position={pos} target={target} />
-          <SoundPulse start={pos} target={target} delay={i * 0.6} />
-        </group>
-      ))}
-
-      {/* Bed Speaker Pulse (coming from below) */}
-      <SoundPulse start={bedSpeaker} target={target} delay={0.3} />
-
-      {HOTSPOTS.map((hotspot) => {
-        const Icon = hotspot.Icon;
-        return (
-          <Html key={hotspot.id} position={hotspot.position} center>
-            <button 
-              onClick={() => {
-                playDeepWoosh();
-                setActiveHotspot(hotspot.id);
-              }}
-              className="w-10 h-10 bg-white/90 backdrop-blur-md rounded-full flex items-center justify-center shadow-lg hover:scale-110 transition-transform cursor-pointer group border border-black/10"
-            >
-              <Icon className="w-5 h-5 text-[#1D1D1F] group-hover:text-blue-600 transition-colors" />
-              <div className="absolute inset-0 rounded-full border border-blue-500 animate-ping opacity-50" />
-            </button>
-          </Html>
-        );
-      })}
-
-      <ContactShadows position={[0, -0.49, 0]} opacity={0.4} scale={5} blur={2} far={4} color="#000000" />
-    </>
-  );
+  useFrame(() => {
+    if (target && controlsRef.current) {
+      targetPos.fromArray(target.position);
+      targetLookAt.fromArray(target.lookAt);
+      camera.position.lerp(targetPos, 0.05);
+      controlsRef.current.target.lerp(targetLookAt, 0.05);
+    } else if (controlsRef.current) {
+      // Default Global View
+      targetPos.set(2.5, 2.0, 2.5);
+      targetLookAt.set(0, 0, 0);
+      camera.position.lerp(targetPos, 0.05);
+      controlsRef.current.target.lerp(targetLookAt, 0.05);
+    }
+  });
+  return null;
 }
 
+// --- Main Component ---
+
 export function Studio3D() {
-  const [activeHotspot, setActiveHotspot] = useState<string | null>(null);
-  const activeData = HOTSPOTS.find(h => h.id === activeHotspot);
+  const [timeline, setTimeline] = useState(0); // 0 to 40 minutes
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [activeLayer, setActiveLayer] = useState('all');
+  const [zoomTarget, setZoomTarget] = useState<any>(null);
+  const controlsRef = useRef<any>(null);
+
+  const progress = timeline / 40; // 0.0 to 1.0
+
+  // Playback logic
+  useEffect(() => {
+    let interval: any;
+    if (isPlaying) {
+      interval = setInterval(() => {
+        setTimeline((prev) => {
+          if (prev >= 40) {
+            setIsPlaying(false);
+            return 40;
+          }
+          return prev + 0.5; // Increment by 30 seconds
+        });
+      }, 100); // Speed of playback
+    }
+    return () => clearInterval(interval);
+  }, [isPlaying]);
+
+  const getPhaseData = (time: number) => {
+    if (time < 10) return { title: "Pénétration Biophysique", desc: "Les ondes (40-80Hz) traversent les tissus profonds, initiant un micro-massage cellulaire." };
+    if (time < 20) return { title: "Réveil des Mécanorécepteurs", desc: "Conversion de l'énergie mécanique en signaux électriques via les corpuscules de Pacini." };
+    if (time < 30) return { title: "Shift Autonomique", desc: "Le Nerf Vague s'active. Le système parasympathique prend le relais sur le stress." };
+    return { title: "Cohérence Globale", desc: "Synchronisation cardiaque parfaite et émission d'ondes cérébrales Thêta (récupération profonde)." };
+  };
+
+  const phase = getPhaseData(timeline);
+
+  const zoomPresets = {
+    global: null,
+    brain: { position: [0.5, 0.7, -1.2], lookAt: [0, 0.3, -0.8] },
+    heart: { position: [0.4, 0.5, -0.2], lookAt: [-0.08, 0.3, -0.2] },
+    cell: { position: [0.2, 0.4, 0.3], lookAt: [0, 0.25, 0.3] },
+  };
 
   return (
-    <section id="studio" className="py-32 bg-[#F5F5F7] relative overflow-hidden">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-100px" }}
-          className="text-center mb-16"
-        >
-          <h2 className="text-4xl md:text-5xl font-semibold text-[#1D1D1F] tracking-tight mb-4">The Physiological Cascade</h2>
-          <p className="text-xl text-[#86868B] max-w-2xl mx-auto">Zoom in to explore the internal biological response during a 40-minute session.</p>
-        </motion.div>
+    <section className="py-24 bg-[#E5E5EA] relative overflow-hidden" id="studio">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-12 relative z-10">
+        <div className="text-center max-w-3xl mx-auto">
+          <h2 className="text-4xl font-semibold text-[#1D1D1F] tracking-tight mb-4">
+            Voyage au Cœur de la Récupération
+          </h2>
+          <p className="text-xl text-[#86868B]">
+            Explorez les mécanismes physiologiques d'une session AudioVitality de 40 minutes.
+          </p>
+        </div>
+      </div>
 
-        <div className="relative w-full h-[600px] md:h-[700px] bg-white rounded-[2rem] overflow-hidden shadow-2xl border border-black/5">
-          <Canvas camera={{ position: [2, 1.5, 3], fov: 45 }}>
-            <Suspense fallback={null}>
-              <Scene setActiveHotspot={setActiveHotspot} />
-              <OrbitControls 
-                enablePan={false} 
-                minDistance={0.5} 
-                maxDistance={8}
-                maxPolarAngle={Math.PI / 2 + 0.1}
-                autoRotate
-                autoRotateSpeed={0.3}
-              />
-            </Suspense>
-          </Canvas>
+      <div className="relative w-full h-[700px] bg-white/50 rounded-3xl overflow-hidden shadow-2xl border border-black/5 max-w-7xl mx-auto">
+        
+        {/* 3D Canvas */}
+        <Canvas shadows camera={{ position: [2.5, 2.0, 2.5], fov: 45 }}>
+          <color attach="background" args={['#F5F5F7']} />
+          <ambientLight intensity={0.6} />
+          <directionalLight position={[5, 10, 5]} intensity={1} castShadow />
+          <pointLight position={[-2, 2, -2]} intensity={0.5} />
+          
+          <CameraController target={zoomTarget} controlsRef={controlsRef} />
+          <OrbitControls ref={controlsRef} enablePan={false} maxPolarAngle={Math.PI / 2 - 0.1} minDistance={0.5} maxDistance={5} />
+          
+          <Bed />
+          <StylizedBody layer={activeLayer} progress={progress} />
+          <SoundWaves progress={progress} />
+          <HolographicData progress={progress} target={zoomTarget} />
+        </Canvas>
 
-          {/* Overlay UI for Hotspots */}
-          <AnimatePresence>
-            {activeData && (
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 20 }}
-                className="absolute bottom-8 left-8 right-8 md:left-auto md:right-8 md:w-[400px] bg-white/95 backdrop-blur-xl p-8 rounded-3xl shadow-2xl border border-black/5"
-              >
-                <button 
-                  onClick={() => {
-                    playCloseSound();
-                    setActiveHotspot(null);
-                  }}
-                  className="absolute top-6 right-6 text-gray-400 hover:text-[#1D1D1F] transition-colors"
+        {/* --- 2D UI OVERLAYS --- */}
+
+        {/* Left Panel: Phase Info */}
+        <div className="absolute top-8 left-8 w-80 bg-white/90 backdrop-blur-xl p-6 rounded-2xl shadow-lg border border-black/5 pointer-events-auto">
+          <div className="flex items-center gap-2 mb-4">
+            <Info className="w-5 h-5 text-blue-500" />
+            <span className="text-xs font-bold uppercase tracking-wider text-[#86868B]">Analyse en Direct</span>
+          </div>
+          <h3 className="text-xl font-semibold text-[#1D1D1F] mb-2">{phase.title}</h3>
+          <p className="text-sm text-[#424245] leading-relaxed">{phase.desc}</p>
+        </div>
+
+        {/* Right Panel: Controls */}
+        <div className="absolute top-8 right-8 flex flex-col gap-4 pointer-events-auto">
+          {/* Layers */}
+          <div className="bg-white/90 backdrop-blur-xl p-4 rounded-2xl shadow-lg border border-black/5">
+            <div className="text-xs font-bold uppercase tracking-wider text-[#86868B] mb-3">Couches Anatomiques</div>
+            <div className="flex flex-col gap-2">
+              {[
+                { id: 'all', label: 'Corps Entier', icon: Layers },
+                { id: 'nervous', label: 'Système Nerveux', icon: Brain },
+                { id: 'vascular', label: 'Système Vasculaire', icon: Heart },
+                { id: 'skin', label: 'Tissus & Fascias', icon: Activity },
+              ].map((l) => (
+                <button
+                  key={l.id}
+                  onClick={() => setActiveLayer(l.id)}
+                  className={`flex items-center gap-3 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    activeLayer === l.id ? 'bg-blue-500 text-white' : 'bg-white text-[#1D1D1F] hover:bg-gray-100 border border-gray-200'
+                  }`}
                 >
-                  <X size={20} />
+                  <l.icon className="w-4 h-4" />
+                  {l.label}
                 </button>
-                <div className="w-12 h-12 bg-[#F5F5F7] rounded-2xl flex items-center justify-center mb-6 border border-black/5">
-                  <Info className="w-6 h-6 text-blue-600" />
-                </div>
-                <h3 className="text-2xl font-semibold text-[#1D1D1F] mb-3 tracking-tight">{activeData.title}</h3>
-                <p className="text-[#424245] leading-relaxed">{activeData.description}</p>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              ))}
+            </div>
+          </div>
 
-          {/* Hint Overlay */}
-          <div className="absolute top-6 left-6 flex items-center gap-3 bg-white/80 backdrop-blur-md px-4 py-2 rounded-full shadow-sm border border-black/5 pointer-events-none">
-            <Maximize2 size={16} className="text-[#1D1D1F]" />
-            <span className="text-sm font-medium text-[#1D1D1F]">Scroll to Zoom Inside</span>
+          {/* Zoom Targets */}
+          <div className="bg-white/90 backdrop-blur-xl p-4 rounded-2xl shadow-lg border border-black/5">
+            <div className="text-xs font-bold uppercase tracking-wider text-[#86868B] mb-3">Focus Micro-Cellulaire</div>
+            <div className="flex flex-col gap-2">
+              <button onClick={() => setZoomTarget(zoomPresets.global)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${!zoomTarget ? 'bg-gray-100 text-black font-semibold' : 'text-[#424245] hover:bg-gray-50'}`}>
+                <ZoomIn className="w-4 h-4" /> Vue Globale
+              </button>
+              <button onClick={() => setZoomTarget(zoomPresets.brain)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${zoomTarget === zoomPresets.brain ? 'bg-gray-100 text-black font-semibold' : 'text-[#424245] hover:bg-gray-50'}`}>
+                <Brain className="w-4 h-4" /> Tronc Cérébral
+              </button>
+              <button onClick={() => setZoomTarget(zoomPresets.heart)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${zoomTarget === zoomPresets.heart ? 'bg-gray-100 text-black font-semibold' : 'text-[#424245] hover:bg-gray-50'}`}>
+                <Heart className="w-4 h-4" /> Cohérence Cardiaque
+              </button>
+              <button onClick={() => setZoomTarget(zoomPresets.cell)} className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${zoomTarget === zoomPresets.cell ? 'bg-gray-100 text-black font-semibold' : 'text-[#424245] hover:bg-gray-50'}`}>
+                <Activity className="w-4 h-4" /> Récepteurs Fasciaux
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* Bottom Panel: Timeline */}
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-full max-w-2xl bg-white/90 backdrop-blur-xl p-6 rounded-3xl shadow-2xl border border-black/5 pointer-events-auto flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-semibold text-[#1D1D1F]">Timeline de la Session</div>
+            <div className="text-sm font-bold text-blue-500">{Math.floor(timeline)}:{(timeline % 1 * 60).toString().padStart(2, '0')} / 40:00</div>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setIsPlaying(!isPlaying)}
+              className="w-12 h-12 flex items-center justify-center bg-[#1D1D1F] text-white rounded-full hover:scale-105 transition-transform shrink-0"
+            >
+              {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-1" />}
+            </button>
+            
+            <input 
+              type="range" 
+              min="0" 
+              max="40" 
+              step="0.5"
+              value={timeline}
+              onChange={(e) => {
+                setTimeline(parseFloat(e.target.value));
+                setIsPlaying(false);
+              }}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+            />
+          </div>
+        </div>
+
       </div>
     </section>
   );
