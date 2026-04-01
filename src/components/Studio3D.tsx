@@ -17,10 +17,6 @@ function Bed() {
       <RoundedBox args={[1.1, 0.15, 2.3]} radius={0.05} position={[0, 0.475, 0]}>
         <meshStandardMaterial color="#2c2724" roughness={0.9} />
       </RoundedBox>
-      {/* Pillow */}
-      <RoundedBox args={[0.6, 0.15, 0.3]} radius={0.05} position={[0, 0.6, -0.8]}>
-        <meshStandardMaterial color="#2c2724" roughness={0.9} />
-      </RoundedBox>
     </group>
   );
 }
@@ -98,27 +94,36 @@ function SoundWaves({ progress }: { progress: number }) {
   useFrame(({ clock }) => {
     waves.current.forEach((wave, i) => {
       if (!wave) return;
-      const speed = 1 + progress; // Waves get smoother/slower
+      const speed = 0.5 + (1 - progress) * 1.5; // Faster when stressed, slower when calm
       const t = (clock.elapsedTime * speed + i * 0.33) % 1;
-      wave.scale.setScalar(1 + t * 2);
+      
+      // Move up from bed (-0.1) to above body (0.6)
+      wave.position.y = -0.1 + (t * 0.7);
+      
       const mat = wave.material as THREE.MeshBasicMaterial;
-      mat.opacity = (1 - t) * 0.4;
+      // Fade in and fade out
+      mat.opacity = Math.sin(t * Math.PI) * 0.6;
+      
+      // Color changes from red to blue
+      const stressColor = new THREE.Color('#ef4444');
+      const calmColor = new THREE.Color('#3b82f6');
+      mat.color.lerpColors(stressColor, calmColor, progress);
     });
   });
 
   return (
     <group position={[0, 0, 0]}>
       {[0, 1, 2].map((i) => (
-        <mesh key={i} ref={el => { waves.current[i] = el; }} rotation={[-Math.PI/2, 0, 0]}>
-          <ringGeometry args={[0.3, 0.35, 64]} />
-          <meshBasicMaterial color="#3b82f6" transparent opacity={0.5} side={THREE.DoubleSide} depthWrite={false} />
+        <mesh key={i} ref={el => { waves.current[i] = el; }} rotation={[-Math.PI/2, 0, 0]} scale={[1, 2, 1]}>
+          <ringGeometry args={[0.5, 0.55, 64]} />
+          <meshBasicMaterial color="#3b82f6" transparent opacity={0} side={THREE.DoubleSide} depthWrite={false} blending={THREE.AdditiveBlending} />
         </mesh>
       ))}
     </group>
   );
 }
 
-function Model() {
+function Model({ progress, layer }: { progress: number, layer: string }) {
   const { scene } = useGLTF('/ecorche_-_anatomy_study.glb');
   
   useEffect(() => {
@@ -126,9 +131,30 @@ function Model() {
       if (child.isMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
+        
+        // Transparency and Heatmap effect based on progress
+        if (child.material) {
+          // If layer is 'all', we fade the skin to reveal the nervous system inside
+          // If layer is 'skin', we keep it opaque.
+          const targetOpacity = layer === 'all' ? Math.max(0.15, 1 - (progress * 1.5)) : 1;
+          
+          child.material.transparent = targetOpacity < 1;
+          child.material.opacity = targetOpacity;
+          
+          // Add a slight emissive color based on progress (Heatmap effect)
+          // Starts red (stress), goes to blue (calm)
+          const stressColor = new THREE.Color('#ef4444');
+          const calmColor = new THREE.Color('#3b82f6');
+          const currentColor = new THREE.Color().lerpColors(stressColor, calmColor, progress);
+          
+          child.material.emissive = currentColor;
+          child.material.emissiveIntensity = progress * 0.3; // Glows more as it heals
+          
+          child.material.needsUpdate = true;
+        }
       }
     });
-  }, [scene]);
+  }, [scene, progress, layer]);
 
   // Le modèle Sketchfab a une échelle interne microscopique (0.00039).
   // Il faut le multiplier par ~80 pour qu'il fasse une taille humaine normale (2m).
@@ -167,7 +193,7 @@ function DetailedMannequin({ layer, progress }: { layer: string, progress: numbe
     <group position={[0, 0.25, 0]}>
       {/* Skin Layer (Real 3D Model) */}
       {showSkin && (
-        <Model />
+        <Model progress={progress} layer={layer} />
       )}
 
       {/* Nervous System */}
