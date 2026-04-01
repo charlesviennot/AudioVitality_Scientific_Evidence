@@ -121,27 +121,27 @@ function SoundWaves({ progress }: { progress: number }) {
 function Model() {
   const { scene } = useGLTF('/ecorche_-_anatomy_study.glb');
   
-  // Clone the scene so we can mutate materials safely
-  const clonedScene = useMemo(() => scene.clone(), [scene]);
-
   useEffect(() => {
-    clonedScene.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
+    scene.traverse((child) => {
+      if (child.isMesh) {
         child.castShadow = true;
         child.receiveShadow = true;
       }
     });
-  }, [clonedScene]);
+  }, [scene]);
 
-  // The model needs to be scaled and rotated to match the bed and the existing nervous system
-  // Ecorche is usually standing Z-up or Y-up. Let's assume Y-up, so we rotate -Math.PI/2 on X to lie down.
-  // We'll use Center to align it perfectly.
+  // Le modèle Sketchfab a une échelle interne microscopique (0.00039).
+  // Il faut le multiplier par ~80 pour qu'il fasse une taille humaine normale (2m).
   return (
-    <Center position={[0, 0.1, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={0.025}>
-      <primitive object={clonedScene} />
-    </Center>
+    <group position={[0, -0.1, 0]} rotation={[-Math.PI / 2, 0, 0]} scale={80}>
+      <Center>
+        <primitive object={scene} />
+      </Center>
+    </group>
   );
 }
+
+useGLTF.preload('/ecorche_-_anatomy_study.glb');
 
 function DetailedMannequin({ layer, progress }: { layer: string, progress: number }) {
   const glassMaterial = useMemo(() => new THREE.MeshPhysicalMaterial({
