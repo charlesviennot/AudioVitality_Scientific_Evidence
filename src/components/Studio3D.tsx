@@ -118,7 +118,7 @@ function SoundWaves({ progress }: { progress: number }) {
   );
 }
 
-function Model({ material }: { material: THREE.Material }) {
+function Model() {
   const { scene } = useGLTF('/ecorche_-_anatomy_study.glb');
   
   // Clone the scene so we can mutate materials safely
@@ -127,12 +127,11 @@ function Model({ material }: { material: THREE.Material }) {
   useEffect(() => {
     clonedScene.traverse((child) => {
       if (child instanceof THREE.Mesh) {
-        child.material = material;
         child.castShadow = true;
         child.receiveShadow = true;
       }
     });
-  }, [clonedScene, material]);
+  }, [clonedScene]);
 
   // The model needs to be scaled and rotated to match the bed and the existing nervous system
   // Ecorche is usually standing Z-up or Y-up. Let's assume Y-up, so we rotate -Math.PI/2 on X to lie down.
@@ -168,7 +167,7 @@ function DetailedMannequin({ layer, progress }: { layer: string, progress: numbe
     <group position={[0, 0.25, 0]}>
       {/* Skin Layer (Real 3D Model) */}
       {showSkin && (
-        <Model material={glassMaterial} />
+        <Model />
       )}
 
       {/* Nervous System */}
