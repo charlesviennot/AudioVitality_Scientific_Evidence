@@ -39,90 +39,6 @@ function BeatingHeart({ progress }: { progress: number }) {
   );
 }
 
-function SoundPulse({ start, target, delay = 0 }: { start: [number, number, number], target: [number, number, number], delay?: number }) {
-  const ref = useRef<THREE.Mesh>(null);
-  const startVec = useMemo(() => new THREE.Vector3(...start), [start]);
-  const targetVec = useMemo(() => new THREE.Vector3(...target), [target]);
-
-  useFrame(({ clock }) => {
-    if (!ref.current) return;
-    const t = ((clock.elapsedTime + delay) % 2) / 2; // 0 to 1 over 2 seconds
-    ref.current.position.lerpVectors(startVec, targetVec, t);
-    ref.current.scale.setScalar(1 + t * 4);
-    const mat = ref.current.material as THREE.MeshBasicMaterial;
-    mat.opacity = (1 - t) * 0.4;
-  });
-
-  return (
-    <mesh ref={ref}>
-      <sphereGeometry args={[0.08, 16, 16]} />
-      <meshBasicMaterial color="#3b82f6" transparent opacity={0.4} depthWrite={false} blending={THREE.AdditiveBlending} />
-    </mesh>
-  );
-}
-
-function Speaker({ position, target }: { position: [number, number, number], target: [number, number, number] }) {
-  const groupRef = useRef<THREE.Group>(null);
-  
-  useFrame(() => {
-    if (groupRef.current) {
-      groupRef.current.lookAt(new THREE.Vector3(...target));
-    }
-  });
-
-  return (
-    <group ref={groupRef} position={position}>
-      <RoundedBox args={[0.4, 0.3, 0.3]} radius={0.02}>
-        <meshStandardMaterial color="#1f1b18" roughness={0.2} metalness={0.8} />
-      </RoundedBox>
-      <mesh position={[0, 0, 0.16]}>
-        <circleGeometry args={[0.1, 32]} />
-        <meshBasicMaterial color="#111" />
-      </mesh>
-      {/* Glowing ring around speaker */}
-      <mesh position={[0, 0, 0.15]}>
-        <ringGeometry args={[0.11, 0.12, 32]} />
-        <meshBasicMaterial color="#3b82f6" transparent opacity={0.5} blending={THREE.AdditiveBlending} />
-      </mesh>
-    </group>
-  );
-}
-
-function SoundWaves({ progress }: { progress: number }) {
-  const waves = useRef<(THREE.Mesh | null)[]>([]);
-  
-  useFrame(({ clock }) => {
-    waves.current.forEach((wave, i) => {
-      if (!wave) return;
-      const speed = 0.5 + (1 - progress) * 1.5; // Faster when stressed, slower when calm
-      const t = (clock.elapsedTime * speed + i * 0.33) % 1;
-      
-      // Move up from bed (-0.1) to above body (0.6)
-      wave.position.y = -0.1 + (t * 0.7);
-      
-      const mat = wave.material as THREE.MeshBasicMaterial;
-      // Fade in and fade out
-      mat.opacity = Math.sin(t * Math.PI) * 0.6;
-      
-      // Color changes from red to blue
-      const stressColor = new THREE.Color('#ef4444');
-      const calmColor = new THREE.Color('#3b82f6');
-      mat.color.lerpColors(stressColor, calmColor, progress);
-    });
-  });
-
-  return (
-    <group position={[0, 0, 0]}>
-      {[0, 1, 2].map((i) => (
-        <mesh key={i} ref={el => { waves.current[i] = el; }} rotation={[-Math.PI/2, 0, 0]} scale={[1, 2, 1]}>
-          <ringGeometry args={[0.5, 0.55, 64]} />
-          <meshBasicMaterial color="#3b82f6" transparent opacity={0} side={THREE.DoubleSide} depthWrite={false} blending={THREE.AdditiveBlending} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
 function Model({ progress, layer }: { progress: number, layer: string }) {
   const { scene } = useGLTF('/ecorche_-_anatomy_study.glb');
   
@@ -132,7 +48,7 @@ function Model({ progress, layer }: { progress: number, layer: string }) {
         child.castShadow = true;
         child.receiveShadow = true;
         
-        // Transparency and Heatmap effect based on progress
+        // Transparency effect based on progress
         if (child.material) {
           // If layer is 'all', we fade the skin to reveal the nervous system inside
           // If layer is 'skin', we keep it opaque.
@@ -141,14 +57,9 @@ function Model({ progress, layer }: { progress: number, layer: string }) {
           child.material.transparent = targetOpacity < 1;
           child.material.opacity = targetOpacity;
           
-          // Add a slight emissive color based on progress (Heatmap effect)
-          // Starts red (stress), goes to blue (calm)
-          const stressColor = new THREE.Color('#ef4444');
-          const calmColor = new THREE.Color('#3b82f6');
-          const currentColor = new THREE.Color().lerpColors(stressColor, calmColor, progress);
-          
-          child.material.emissive = currentColor;
-          child.material.emissiveIntensity = progress * 0.3; // Glows more as it heals
+          // Remove emissive glow from the skin so the internal nerves stand out clearly
+          child.material.emissive = new THREE.Color('#000000');
+          child.material.emissiveIntensity = 0;
           
           child.material.needsUpdate = true;
         }
@@ -376,19 +287,7 @@ export function Studio3D() {
             
             <Bed />
             <DetailedMannequin layer={activeLayer} progress={progress} />
-            <SoundWaves progress={progress} />
             <HolographicData progress={progress} target={zoomTarget} />
-
-            {/* Overhead Speakers and their sound pulses */}
-            {speakers.map((pos, i) => (
-              <group key={`speaker-${i}`}>
-                <Speaker position={pos} target={targetChest} />
-                <SoundPulse start={pos} target={targetChest} delay={i * 0.6} />
-              </group>
-            ))}
-
-            {/* Bed Speaker Pulse (coming from below) */}
-            <SoundPulse start={bedSpeaker} target={targetChest} delay={0.3} />
           </Suspense>
         </Canvas>
 
