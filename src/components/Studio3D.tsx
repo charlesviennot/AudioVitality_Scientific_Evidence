@@ -115,35 +115,100 @@ function Speaker({ position, target }: { position: [number, number, number], tar
   );
 }
 
-function SoundWaves({ progress }: { progress: number }) {
-  const waves = useRef<(THREE.Mesh | null)[]>([]);
-  
-  useFrame(({ clock }) => {
-    waves.current.forEach((wave, i) => {
-      if (!wave) return;
-      const speed = 0.2 + (1 - progress) * 0.5;
-      const t = (clock.elapsedTime * speed + i * 0.33) % 1;
+function FluidParticles({ progress }: { progress: number }) {
+  const count = 2000;
+  const positions = useMemo(() => new Float32Array(count * 3), []);
+  const velocities = useMemo(() => new Float32Array(count * 3), []);
+  const pointsRef = useRef<THREE.Points>(null);
+
+  useEffect(() => {
+    for (let i = 0; i < count; i++) {
+      positions[i * 3] = (Math.random() - 0.5) * 2.5;
+      positions[i * 3 + 1] = -0.3 + Math.random() * 0.2; // Start near bed
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 2.5;
       
-      wave.position.y = -0.1 + (t * 0.6);
-      wave.scale.setScalar(1 + t * 0.2);
+      velocities[i * 3] = (Math.random() - 0.5) * 0.005;
+      velocities[i * 3 + 1] = 0.005 + Math.random() * 0.015;
+      velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.005;
+    }
+  }, [count, positions, velocities]);
+
+  useFrame(() => {
+    if (!pointsRef.current) return;
+    const positionsAttr = pointsRef.current.geometry.attributes.position;
+    const posArray = positionsAttr.array as Float32Array;
+
+    for (let i = 0; i < count; i++) {
+      // Update position
+      posArray[i * 3] += velocities[i * 3];
+      posArray[i * 3 + 1] += velocities[i * 3 + 1];
+      posArray[i * 3 + 2] += velocities[i * 3 + 2];
+
+      // Swirl effect around the body
+      const x = posArray[i * 3];
+      const y = posArray[i * 3 + 1];
+      const z = posArray[i * 3 + 2];
+      const dist = Math.sqrt(x*x + z*z);
       
-      const mat = wave.material as THREE.MeshBasicMaterial;
-      mat.opacity = Math.sin(t * Math.PI) * 0.08; // Very soft opacity
-      
-      const stressColor = new THREE.Color('#ef4444');
-      const calmColor = new THREE.Color('#3b82f6');
-      mat.color.lerpColors(stressColor, calmColor, progress);
-    });
+      // Flow around the body (body is roughly at x=0, z=0)
+      if (dist < 0.4 && y > -0.1 && y < 0.3) {
+        // Push outwards and swirl
+        velocities[i * 3] += x * 0.002 - z * 0.001;
+        velocities[i * 3 + 2] += z * 0.002 + x * 0.001;
+      }
+
+      // Reset if too high or too far
+      if (y > 1.0 || dist > 1.5) {
+        posArray[i * 3] = (Math.random() - 0.5) * 2.0;
+        posArray[i * 3 + 1] = -0.3;
+        posArray[i * 3 + 2] = (Math.random() - 0.5) * 2.0;
+        velocities[i * 3] = (Math.random() - 0.5) * 0.005;
+        velocities[i * 3 + 1] = 0.005 + Math.random() * 0.015;
+        velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.005;
+      }
+    }
+    positionsAttr.needsUpdate = true;
+    
+    const mat = pointsRef.current.material as THREE.PointsMaterial;
+    const stressColor = new THREE.Color('#ef4444');
+    const calmColor = new THREE.Color('#3b82f6');
+    mat.color.lerpColors(stressColor, calmColor, progress);
   });
 
   return (
-    <group position={[0, 0, 0]}>
-      {[0, 1, 2].map((i) => (
-        <mesh key={i} ref={el => { waves.current[i] = el; }} rotation={[-Math.PI/2, 0, 0]}>
-          <torusGeometry args={[0.6, 0.002, 16, 100]} />
-          <meshBasicMaterial color="#3b82f6" transparent opacity={0} depthWrite={false} blending={THREE.AdditiveBlending} />
-        </mesh>
-      ))}
+    <points ref={pointsRef}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" count={count} array={positions} itemSize={3} />
+      </bufferGeometry>
+      <pointsMaterial size={0.02} transparent opacity={0.6} blending={THREE.AdditiveBlending} depthWrite={false} />
+    </points>
+  );
+}
+
+function EndocrineSystem({ progress }: { progress: number }) {
+  // Cortisol (Adrenal glands) - Red glow, decreases with progress
+  // Endorphins/Melatonin (Brain) - Purple glow, increases with progress
+
+  const cortisolOpacity = Math.max(0, 0.8 - progress * 1.5);
+  const endorphinOpacity = Math.min(0.8, progress * 1.2);
+
+  return (
+    <group position={[0, -0.12, 0]}>
+      {/* Adrenal Glands (approximate position above kidneys) */}
+      <Sphere args={[0.025, 16, 16]} position={[-0.08, 0.05, 0.15]}>
+        <meshBasicMaterial color="#ef4444" transparent opacity={cortisolOpacity} blending={THREE.AdditiveBlending} />
+      </Sphere>
+      <Sphere args={[0.025, 16, 16]} position={[0.08, 0.05, 0.15]}>
+        <meshBasicMaterial color="#ef4444" transparent opacity={cortisolOpacity} blending={THREE.AdditiveBlending} />
+      </Sphere>
+
+      {/* Pineal/Pituitary Gland (Brain) */}
+      <Sphere args={[0.03, 16, 16]} position={[0, 0.02, -0.85]}>
+        <meshBasicMaterial color="#a855f7" transparent opacity={endorphinOpacity} blending={THREE.AdditiveBlending} />
+      </Sphere>
+      <Sphere args={[0.05, 16, 16]} position={[0, 0.02, -0.85]}>
+        <meshBasicMaterial color="#8b5cf6" transparent opacity={endorphinOpacity * 0.5} blending={THREE.AdditiveBlending} />
+      </Sphere>
     </group>
   );
 }
@@ -253,9 +318,14 @@ function BranchingNerves({ color, progress }: { color: string, progress: number 
   );
 }
 
-function Model({ progress, layer }: { progress: number, layer: string }) {
+function Model({ progress, layer, clipDepth }: { progress: number, layer: string, clipDepth: number }) {
   const { scene } = useGLTF('/ecorche_-_anatomy_study.glb');
+  const clipPlane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, -1, 0), 1), []);
   
+  useEffect(() => {
+    clipPlane.constant = clipDepth;
+  }, [clipDepth, clipPlane]);
+
   useEffect(() => {
     scene.traverse((child) => {
       if (child.isMesh) {
@@ -275,11 +345,15 @@ function Model({ progress, layer }: { progress: number, layer: string }) {
           child.material.emissive = new THREE.Color('#000000');
           child.material.emissiveIntensity = 0;
           
+          // Apply clipping plane
+          child.material.clippingPlanes = [clipPlane];
+          child.material.clipShadows = true;
+          
           child.material.needsUpdate = true;
         }
       }
     });
-  }, [scene, progress, layer]);
+  }, [scene, progress, layer, clipPlane]);
 
   // Le modèle Sketchfab a une échelle interne microscopique (0.00039).
   // Il faut le multiplier par ~80 pour qu'il fasse une taille humaine normale (2m).
@@ -294,7 +368,7 @@ function Model({ progress, layer }: { progress: number, layer: string }) {
 
 useGLTF.preload('/ecorche_-_anatomy_study.glb');
 
-function DetailedMannequin({ layer, progress }: { layer: string, progress: number }) {
+function DetailedMannequin({ layer, progress, clipDepth }: { layer: string, progress: number, clipDepth: number }) {
   const groupRef = useRef<THREE.Group>(null);
 
   useFrame(({ clock }) => {
@@ -329,7 +403,7 @@ function DetailedMannequin({ layer, progress }: { layer: string, progress: numbe
     <group ref={groupRef} position={[0, 0.25, 0]}>
       {/* Skin Layer (Real 3D Model) */}
       {showSkin && (
-        <Model progress={progress} layer={layer} />
+        <Model progress={progress} layer={layer} clipDepth={clipDepth} />
       )}
 
       {/* Hotspots */}
@@ -364,6 +438,11 @@ function DetailedMannequin({ layer, progress }: { layer: string, progress: numbe
           <BranchingNerves color={stateColorHex} progress={progress} />
           <CellularNetwork progress={progress} color={stateColorHex} />
         </group>
+      )}
+
+      {/* Endocrine System */}
+      {(layer === 'all' || layer === 'endocrine') && (
+        <EndocrineSystem progress={progress} />
       )}
 
       {/* Vascular / Organs */}
@@ -462,6 +541,7 @@ export function Studio3D() {
   const [isMuted, setIsMuted] = useState(true);
   const [activeLayer, setActiveLayer] = useState('all');
   const [zoomTarget, setZoomTarget] = useState<any>(null);
+  const [clipDepth, setClipDepth] = useState(0.5); // 0.5 means fully visible (top of the body)
   const controlsRef = useRef<any>(null);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -561,7 +641,7 @@ export function Studio3D() {
       <div className="relative w-full h-[700px] bg-white/50 rounded-3xl overflow-hidden shadow-2xl border border-black/5 max-w-7xl mx-auto">
         
         {/* 3D Canvas */}
-        <Canvas shadows camera={{ position: [2.5, 2.0, 2.5], fov: 45 }}>
+        <Canvas shadows camera={{ position: [2.5, 2.0, 2.5], fov: 45 }} gl={{ localClippingEnabled: true }}>
           <Suspense fallback={
             <Html center>
               <div className="bg-white/90 backdrop-blur-md px-6 py-3 rounded-2xl shadow-xl border border-black/10 text-blue-500 font-semibold flex items-center gap-3 whitespace-nowrap">
@@ -580,8 +660,8 @@ export function Studio3D() {
             <OrbitControls ref={controlsRef} enablePan={false} maxPolarAngle={Math.PI / 2 - 0.1} minDistance={0.5} maxDistance={5} />
             
             <Bed />
-            <DetailedMannequin layer={activeLayer} progress={progress} />
-            <SoundWaves progress={progress} />
+            <DetailedMannequin layer={activeLayer} progress={progress} clipDepth={clipDepth} />
+            <FluidParticles progress={progress} />
             <HolographicData progress={progress} target={zoomTarget} />
 
             {/* Overhead Speakers and their sound pulses */}
@@ -627,6 +707,7 @@ export function Studio3D() {
                 { id: 'all', label: 'Corps Entier', icon: Layers },
                 { id: 'nervous', label: 'Système Nerveux', icon: Brain },
                 { id: 'vascular', label: 'Système Vasculaire', icon: Heart },
+                { id: 'endocrine', label: 'Système Endocrinien', icon: Activity },
                 { id: 'skin', label: 'Tissus & Fascias', icon: Activity },
               ].map((l) => (
                 <button
@@ -662,6 +743,23 @@ export function Studio3D() {
                 <Activity className="w-4 h-4" /> Récepteurs Fasciaux
               </button>
             </div>
+          </div>
+
+          {/* X-Ray Slider */}
+          <div className="bg-white/40 backdrop-blur-2xl p-4 rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.1)] border border-white/40">
+            <div className="text-xs font-bold uppercase tracking-wider text-gray-700 mb-3 px-2 flex justify-between">
+              <span>Shader Rayon X</span>
+              <span className="text-blue-600">{Math.round((clipDepth + 0.1) * 100)}%</span>
+            </div>
+            <input 
+              type="range" 
+              min="-0.1" 
+              max="0.5" 
+              step="0.01"
+              value={clipDepth}
+              onChange={(e) => setClipDepth(parseFloat(e.target.value))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-500"
+            />
           </div>
         </div>
 
