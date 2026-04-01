@@ -3,7 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, RoundedBox, Sphere, Cylinder, Capsule, Line, Html, useGLTF, Center, Environment } from '@react-three/drei';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import * as THREE from 'three';
-import { Activity, Brain, Heart, Layers, Play, Pause, ZoomIn, Info, Volume2, VolumeX } from 'lucide-react';
+import { Activity, Brain, Heart, Layers, Play, Pause, ZoomIn, Info, Volume2, VolumeX, Upload, X } from 'lucide-react';
 
 // --- 3D Components ---
 
@@ -258,24 +258,26 @@ function Model({ progress, layer }: { progress: number, layer: string }) {
   
   useEffect(() => {
     scene.traverse((child) => {
-      if (child.isMesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
+      const mesh = child as THREE.Mesh;
+      if (mesh.isMesh) {
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
         
         // Transparency effect based on progress
-        if (child.material) {
+        if (mesh.material) {
           // If layer is 'all', we fade the skin to reveal the nervous system inside
           // If layer is 'skin', we keep it opaque.
           const targetOpacity = layer === 'all' ? Math.max(0.15, 1 - (progress * 1.5)) : 1;
           
-          child.material.transparent = targetOpacity < 1;
-          child.material.opacity = targetOpacity;
+          const mat = mesh.material as THREE.MeshStandardMaterial;
+          mat.transparent = targetOpacity < 1;
+          mat.opacity = targetOpacity;
           
           // Remove emissive glow from the skin so the internal nerves stand out clearly
-          child.material.emissive = new THREE.Color('#000000');
-          child.material.emissiveIntensity = 0;
+          mat.emissive = new THREE.Color('#000000');
+          mat.emissiveIntensity = 0;
           
-          child.material.needsUpdate = true;
+          mat.needsUpdate = true;
         }
       }
     });
@@ -380,23 +382,40 @@ function DetailedMannequin({ layer, progress }: { layer: string, progress: numbe
   );
 }
 
-function MiniGraph({ color, progress, type }: { color: string, progress: number, type: 'hrv' | 'stress' }) {
+function MiniGraph({ color, progress, type, customData, timeline }: { color: string, progress: number, type: 'hrv' | 'stress', customData?: any[] | null, timeline: number }) {
   const points = useMemo(() => {
     let pts = "";
-    for (let i = 0; i < 50; i++) {
-      const x = i * 2;
-      let y = 15;
-      if (type === 'hrv') {
-        const freq = 0.8 - progress * 0.5;
-        y += Math.sin(i * freq) * 10 * (0.3 + progress * 0.7);
-      } else {
-        const noise = (Math.random() - 0.5) * 20 * (1 - progress);
-        y += noise;
+    if (customData && customData.length > 0) {
+      const maxVal = 100;
+      const visibleData = customData.filter((d: any) => d.time <= timeline);
+      const dataToDraw = visibleData.slice(-50);
+      
+      if (dataToDraw.length === 0) return "";
+      
+      for (let i = 0; i < 50; i++) {
+        const x = i * 2;
+        const dataIndex = Math.floor((i / 50) * dataToDraw.length);
+        const d = dataToDraw[dataIndex] || dataToDraw[dataToDraw.length - 1];
+        const val = d ? d[type] : 0;
+        const y = 30 - (val / maxVal) * 30;
+        pts += `${x},${y} `;
       }
-      pts += `${x},${y} `;
+    } else {
+      for (let i = 0; i < 50; i++) {
+        const x = i * 2;
+        let y = 15;
+        if (type === 'hrv') {
+          const freq = 0.8 - progress * 0.5;
+          y += Math.sin(i * freq) * 10 * (0.3 + progress * 0.7);
+        } else {
+          const noise = (Math.random() - 0.5) * 20 * (1 - progress);
+          y += noise;
+        }
+        pts += `${x},${y} `;
+      }
     }
     return pts;
-  }, [progress, type]);
+  }, [progress, type, customData, timeline]);
 
   return (
     <svg width="100%" height="30" className="mt-2 opacity-80 overflow-visible">
@@ -405,12 +424,20 @@ function MiniGraph({ color, progress, type }: { color: string, progress: number,
   );
 }
 
-function HolographicData({ progress, target }: { progress: number, target: any }) {
+function HolographicData({ progress, target, customData, timeline }: { progress: number, target: any, customData?: any[] | null, timeline: number }) {
   // Only show holograms in global view
   if (target) return null;
 
-  const hrv = Math.round(42 + (progress * 43));
-  const stress = Math.round(85 - (progress * 70));
+  let hrv = Math.round(42 + (progress * 43));
+  let stress = Math.round(85 - (progress * 70));
+
+  if (customData && customData.length > 0) {
+    const closest = customData.reduce((prev: any, curr: any) => 
+      Math.abs(curr.time - timeline) < Math.abs(prev.time - timeline) ? curr : prev
+    );
+    hrv = closest.hrv;
+    stress = closest.stress;
+  }
 
   return (
     <group>
@@ -418,14 +445,14 @@ function HolographicData({ progress, target }: { progress: number, target: any }
         <div className="bg-white/40 backdrop-blur-2xl border border-white/40 p-4 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.1)] w-40 transition-all">
           <div className="text-[10px] font-bold text-gray-600 uppercase tracking-wider mb-1">HRV (ms)</div>
           <div className="text-3xl font-semibold text-gray-900">{hrv}</div>
-          <MiniGraph color="#3b82f6" progress={progress} type="hrv" />
+          <MiniGraph color="#3b82f6" progress={progress} type="hrv" customData={customData} timeline={timeline} />
         </div>
       </Html>
       <Html position={[-0.7, 0.7, 0.2]} center className="pointer-events-none">
         <div className="bg-white/40 backdrop-blur-2xl border border-white/40 p-4 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.1)] w-40 transition-all">
           <div className="text-[10px] font-bold text-gray-600 uppercase tracking-wider mb-1">Stress (Cortisol)</div>
           <div className="text-3xl font-semibold text-gray-900">{stress}%</div>
-          <MiniGraph color="#ef4444" progress={progress} type="stress" />
+          <MiniGraph color="#ef4444" progress={progress} type="stress" customData={customData} timeline={timeline} />
         </div>
       </Html>
     </group>
@@ -467,6 +494,42 @@ export function Studio3D() {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const oscRef = useRef<OscillatorNode | null>(null);
   const gainRef = useRef<GainNode | null>(null);
+
+  const [customData, setCustomData] = useState<any[] | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const json = JSON.parse(e.target?.result as string);
+          if (Array.isArray(json)) {
+            setCustomData(json);
+          } else {
+            alert("Le fichier JSON doit contenir un tableau de données.");
+          }
+        } catch (err) {
+          console.error("Invalid JSON file");
+          alert("Erreur: Le fichier doit être un JSON valide.");
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  const loadExampleData = () => {
+    const example = [];
+    for (let i = 0; i <= 40; i += 0.5) {
+      example.push({
+        time: i,
+        hrv: Math.round(40 + (i / 40) * 45 + Math.random() * 10),
+        stress: Math.max(0, Math.round(85 - (i / 40) * 75 + Math.random() * 10))
+      });
+    }
+    setCustomData(example);
+  };
 
   const progress = timeline / 40; // 0.0 to 1.0
 
@@ -582,7 +645,7 @@ export function Studio3D() {
             <Bed />
             <DetailedMannequin layer={activeLayer} progress={progress} />
             <SoundWaves progress={progress} />
-            <HolographicData progress={progress} target={zoomTarget} />
+            <HolographicData progress={progress} target={zoomTarget} customData={customData} timeline={timeline} />
 
             {/* Overhead Speakers and their sound pulses */}
             {speakers.map((pos, i) => (
@@ -661,6 +724,40 @@ export function Studio3D() {
               <button onClick={() => setZoomTarget(zoomPresets.cell)} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${zoomTarget === zoomPresets.cell ? 'bg-gray-100/80 text-black shadow-sm' : 'text-gray-800 hover:bg-white/50'}`}>
                 <Activity className="w-4 h-4" /> Récepteurs Fasciaux
               </button>
+            </div>
+          </div>
+
+          {/* Data Injection */}
+          <div className="bg-white/40 backdrop-blur-2xl p-4 rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.1)] border border-white/40">
+            <div className="text-xs font-bold uppercase tracking-wider text-gray-700 mb-3 px-2">Données Personnelles</div>
+            <div className="flex flex-col gap-2">
+              <input 
+                type="file" 
+                accept=".json" 
+                ref={fileInputRef} 
+                onChange={handleFileUpload} 
+                className="hidden" 
+              />
+              <button 
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 text-gray-800 hover:bg-white/50"
+              >
+                <Upload className="w-4 h-4" /> Importer JSON
+              </button>
+              <button 
+                onClick={loadExampleData}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 text-gray-800 hover:bg-white/50"
+              >
+                <Activity className="w-4 h-4" /> Data Démo
+              </button>
+              {customData && (
+                <button 
+                  onClick={() => setCustomData(null)}
+                  className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 text-red-600 hover:bg-red-50"
+                >
+                  <X className="w-4 h-4" /> Effacer Data
+                </button>
+              )}
             </div>
           </div>
         </div>
