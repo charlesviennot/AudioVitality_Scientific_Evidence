@@ -11,7 +11,10 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@gltf-transform/core": "^4.3.0",
+    "@gltf-transform/extensions": "^4.3.0",
     "@google/genai": "^1.29.0",
+    "@react-pdf/renderer": "^4.4.0",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
     "@react-three/postprocessing": "^3.0.4",
