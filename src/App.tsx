@@ -20,7 +20,9 @@ function Navigation() {
       className="fixed top-0 left-0 right-0 z-40 flex justify-center pt-6 px-4 pointer-events-none"
     >
       <div className="bg-[#E5E5EA]/80 backdrop-blur-xl border border-black/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-full px-6 py-3 flex items-center gap-8 pointer-events-auto">
-        <div className="font-semibold tracking-tight text-[#1D1D1F] mr-4">AudioVitality</div>
+        <div className="mr-4 flex items-center">
+          <img src="/AVI_Logo_Black.png" alt="AudioVitality Logo" className="h-6 object-contain" />
+        </div>
         <div className="hidden md:flex items-center gap-6 text-sm font-medium text-[#86868B]">
           <a href="#hero" className="hover:text-[#1D1D1F] transition-colors">Home</a>
           <a href="#introduction" className="hover:text-[#1D1D1F] transition-colors">Paradigm</a>
